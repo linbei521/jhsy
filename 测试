@@ -20,14 +20,14 @@ local DistanceForAutoChopTree = 25
 _G.isCollecting = false
 local collectQuantity = 10
 
--- 优化：收集设置
+-- 优化：收集设置 (这些设置对新逻辑影响不大，但保留以防万一)
 local CollectSettings = {
-    MaxRetries = 3,              -- 最大重试次数
-    RetryDelay = 2,              -- 重试延迟(秒)
-    PickupDelay = 1,             -- 拾取后延迟(秒)
-    TeleportDelay = 0.5,         -- 传送后延迟(秒)
-    VerificationRange = 30,      -- 传送验证范围
-    SafetyDelay = 1.5           -- 安全延迟(秒)
+    MaxRetries = 3,
+    RetryDelay = 2,
+    PickupDelay = 1,
+    TeleportDelay = 0.5,
+    VerificationRange = 30,
+    SafetyDelay = 1.5
 }
 
 local Features = {
@@ -214,7 +214,7 @@ local function teleportToBonfire()
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
--- ==========================[新收集+丢弃逻辑 - 开始]==========================
+-- ==========================[最终修改版收集逻辑 - 开始]==========================
 
 -- 辅助函数：统计背包内物品数量
 local function getInventoryItemCount(itemName)
@@ -228,15 +228,14 @@ local function getInventoryItemCount(itemName)
     return count
 end
 
--- 这是替换后的新函数，用于快速拾取并丢弃附近的物品
-function collectAndDropNearbyLoop(itemName, displayName, quantity)
+-- 这是基于您要求的全新函数：快速本地拾取 + 丢弃
+function collectAndDropLocalLoop(itemName, displayName, quantity)
     _G.isCollecting = true
     library:Notify({Title = "任务开始", Text = "将原地刷 " .. quantity .. " 个" .. displayName, Duration = 3})
 
     local player = game:GetService("Players").LocalPlayer
     local remoteEvents = game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents")
-    -- 设置为无限大范围，它会寻找全图最近的那个
-    local PICKUP_RANGE = math.huge 
+    local PICKUP_RANGE = math.huge -- 无限范围
 
     -- 寻找一个可用的背包
     local function findActiveSack()
@@ -249,7 +248,7 @@ function collectAndDropNearbyLoop(itemName, displayName, quantity)
         return nil
     end
 
-    -- 在指定范围内寻找最近的、可拾取的物品
+    -- 在无限范围内寻找最近的、可拾取的物品
     local function findClosestItem()
         local closestItem, minDist = nil, PICKUP_RANGE
         local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
@@ -296,8 +295,8 @@ function collectAndDropNearbyLoop(itemName, displayName, quantity)
             
             local beforeCount = getInventoryItemCount(itemName)
 
-            -- [你的拾取逻辑]
-            local success, err = pcall(function()
+            -- [您提供的快速拾取逻辑]
+            local pickupSuccess, err = pcall(function()
                 remoteEvents.EquipItemHandle:FireServer("FireAllClients", sack)
                 task.wait(0.1)
                 remoteEvents.RequestStartDraggingItem:FireServer(targetItem)
@@ -308,7 +307,7 @@ function collectAndDropNearbyLoop(itemName, displayName, quantity)
                 remoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = player.Character.Head, Volume = 0.25})
             end)
 
-            if not success then
+            if not pickupSuccess then
                 library:Notify({Title = "拾取错误", Text = "拾取时发生错误，跳过此物品。", Duration = 3})
                 task.wait(1)
                 continue -- 跳过本次循环
@@ -319,14 +318,20 @@ function collectAndDropNearbyLoop(itemName, displayName, quantity)
             local afterCount = getInventoryItemCount(itemName)
 
             -- [丢弃物品逻辑]
-            -- 只有在确认物品数量增加后才执行丢弃
             if afterCount > beforeCount then
+                library:Notify({Title = "拾取成功", Text = "已拾取一个 " .. displayName .. "，准备丢弃...", Duration = 2})
                 local itemToDrop = player.Inventory:FindFirstChild(itemName)
                 if itemToDrop then
                     pcall(function()
                         remoteEvents.RequestBagDropItem:FireServer(sack, itemToDrop, true)
                     end)
-                    -- library:Notify({Title = "丢弃成功", Text = "已丢弃一个" .. displayName, Duration = 1})
+                    task.wait(0.2) -- 丢弃后短暂等待
+                    local finalCount = getInventoryItemCount(itemName)
+                    if finalCount < afterCount then
+                        -- library:Notify({Title = "丢弃成功", Text = "已成功丢弃一个" .. displayName, Duration = 1})
+                    else
+                        library:Notify({Title = "丢弃验证失败", Text = "物品数量未减少", Duration = 2})
+                    end
                 else
                     library:Notify({Title = "丢弃失败", Text = "背包里找不到" .. displayName .. " 来丢弃", Duration = 3})
                 end
@@ -348,7 +353,8 @@ function collectAndDropNearbyLoop(itemName, displayName, quantity)
     end
     _G.isCollecting = false
 end
--- ==========================[新收集+丢弃逻辑 - 结束]==========================
+-- ==========================[最终修改版收集逻辑 - 结束]==========================
+
 
 -- ESP
 local function toggleESP(itemName, displayName, color)
@@ -1122,25 +1128,12 @@ CollectTab:NewBox("自定义收集数量", "10", function(text)
     end
 end)
 
--- 优化：添加收集设置
 CollectTab:NewSeparator()
-CollectTab:NewButton("=== 收集优化设置 ===", function() end)
-CollectTab:NewSlider("最大重试次数", "Max_Retries", CollectSettings.MaxRetries, 1, 10, false, function(value)
-    CollectSettings.MaxRetries = value
-    library:Notify({Title = "设置", Text = "最大重试次数: " .. value, Duration = 2})
-end)
-CollectTab:NewSlider("重试延迟(秒)", "Retry_Delay", CollectSettings.RetryDelay, 1, 10, true, function(value)
-    CollectSettings.RetryDelay = value
-    library:Notify({Title = "设置", Text = "重试延迟: " .. value .. "秒", Duration = 2})
-end)
-CollectTab:NewSlider("拾取延迟(秒)", "Pickup_Delay", CollectSettings.PickupDelay, 0.5, 5, true, function(value)
-    CollectSettings.PickupDelay = value
-    library:Notify({Title = "设置", Text = "拾取延迟: " .. value .. "秒", Duration = 2})
-end)
-CollectTab:NewSlider("安全延迟(秒)", "Safety_Delay", CollectSettings.SafetyDelay, 0.5, 5, true, function(value)
-    CollectSettings.SafetyDelay = value
-    library:Notify({Title = "设置", Text = "安全延迟: " .. value .. "秒", Duration = 2})
-end)
+CollectTab:NewButton("=== 收集设置 (当前模式下部分无效) ===", function() end)
+CollectTab:NewSlider("最大重试次数", "Max_Retries", CollectSettings.MaxRetries, 1, 10, false, function(value) end)
+CollectTab:NewSlider("重试延迟(秒)", "Retry_Delay", CollectSettings.RetryDelay, 1, 10, true, function(value) end)
+CollectTab:NewSlider("拾取延迟(秒)", "Pickup_Delay", CollectSettings.PickupDelay, 0.5, 5, true, function(value) end)
+CollectTab:NewSlider("安全延迟(秒)", "Safety_Delay", CollectSettings.SafetyDelay, 0.5, 5, true, function(value) end)
 
 CollectTab:NewSeparator()
 for _, item in ipairs(collectItemConfig) do
@@ -1150,8 +1143,8 @@ for _, item in ipairs(collectItemConfig) do
             return
         end
         task.spawn(function()
-            -- [已修改] 调用新的“拾取并丢弃”函数
-            collectAndDropNearbyLoop(item.name, item.display, collectQuantity)
+            -- [已修改] 调用您要求的“快速拾取+丢弃”新函数
+            collectAndDropLocalLoop(item.name, item.display, collectQuantity)
         end)
     end)
 end
