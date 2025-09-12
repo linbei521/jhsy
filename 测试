@@ -1,0 +1,1759 @@
+--[[ 
+    NanTianMen Script (Chinese writing supported, no-occupancy check) - 优化版
+    优化要点：
+    - 改进拾取检测逻辑，使用背包物品数量变化来判断成功
+    - 添加失败重试机制，最多重试3次
+    - 增加冷却时间，避免被反作弊检测
+    - 优化错误处理和状态监控
+    - 添加更详细的调试信息
+]]
+
+local function Message(ConTent, Time)
+    spawn(function()
+        local Message = Instance.new("Message",game:GetService("Workspace"))
+        Message.Text = ConTent
+        wait(Time)
+        Message:Destroy()
+    end)
+end
+
+if not _G.NanTianMen then
+    _G.NanTianMen = true
+    print("NanTianMen Load")
+    Message("加载中,请耐心等待", 5)
+    -- 预制部分/函数部分
+        local _Kick = game:GetService("Players").LocalPlayer.Character.Name.."你未列入白名单" -- 踢出提示
+        local _Script_id = "C"
+
+        local function kick(text)
+            game:GetService("Players").LocalPlayer:Kick(text)
+            wait(3)
+            game:shutdown()
+            wait(1)
+            kick("(404)")
+            while true do end
+        end
+
+        local function randomString(length)
+            local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456"
+            local name = ""
+            for i = 1, length do
+                local rand = math.random(#chars)
+                name = name .. chars:sub(rand, rand)
+            end
+            return name
+        end
+
+
+        -- Base64
+            local base64 = "S5GHIJOUjPQ63team+EsugAb24qr01lNBRDFn9oZKLTM78wxyz/dVWfXkYChpicv"
+            local function Base64_enc(data) return ((data:gsub('.', function(x) local r,base64='',x:byte() for i=8,1,-1 do r=r..(base64%2^i-base64%2^(i-1)>0 and '1' or '0') end return r; end)..'0000'):gsub('%d%d%d?%d?%d?', function(x) if (#x < 6) then return '' end local c=0 for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end return base64:sub(c+1,c+1) end)..({ '', '==', '=' })[#data%3+1]) end
+            local function Base64_dec(data) data = string.gsub(data, '[^'..base64..'=]', '') return (data:gsub('.', function(x) if (x == '=') then return '' end local r,f='',(base64:find(x)-1) for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end return r; end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x) if (#x ~= 8) then return '' end local c=0 for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end return string.char(c) end)) end
+
+            local base64 = '7CXv+Esugy2PamteAbKL4hic/Q6VWlIJOUSq3zNBRpfdDFn8xr5GH01oZ9kYjTwM'
+            local function Base64_enc_Args(data) return ((data:gsub('.', function(x) local r,base64='',x:byte() for i=8,1,-1 do r=r..(base64%2^i-base64%2^(i-1)>0 and '1' or '0') end return r; end)..'0000'):gsub('%d%d%d?%d?%d?', function(x) if (#x < 6) then return '' end local c=0 for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end return base64:sub(c+1,c+1) end)..({ '', '==', '=' })[#data%3+1]) end
+            local function Base64_dec_Args(data) data = string.gsub(data, '[^'..base64..'=]', '') return (data:gsub('.', function(x) if (x == '=') then return '' end local r,f='',(base64:find(x)-1) for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end return r; end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x) if (#x ~= 8) then return '' end local c=0 for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end return string.char(c) end)) end
+
+        -- MD5 Roblox-compatible
+            local function bit_and(a, b)
+                local result = 0
+                local bit = 1
+                while a > 0 and b > 0 do
+                    if a % 2 == 1 and b % 2 == 1 then
+                        result = result + bit
+                    end
+                    a = math.floor(a / 2)
+                    b = math.floor(b / 2)
+                    bit = bit * 2
+                end
+                return result
+            end
+
+            local function bit_or(a, b)
+                local result = 0
+                local bit = 1
+                while a > 0 or b > 0 do
+                    if a % 2 == 1 or b % 2 == 1 then
+                        result = result + bit
+                    end
+                    a = math.floor(a / 2)
+                    b = math.floor(b / 2)
+                    bit = bit * 2
+                end
+                return result
+            end
+
+            local function bit_xor(a, b)
+                local result = 0
+                local bit = 1
+                while a > 0 or b > 0 do
+                    if a % 2 ~= b % 2 then
+                        result = result + bit
+                    end
+                    a = math.floor(a / 2)
+                    b = math.floor(b / 2)
+                    bit = bit * 2
+                end
+                return result
+            end
+
+            local function bit_not(a)
+                return 0xFFFFFFFF - a
+            end
+
+            local function leftRotate(x, c)
+                x = x % 0x100000000
+                return bit_or((x * (2^c)) % 0x100000000, math.floor(x / (2^(32-c))))
+            end
+
+            local s = {
+                7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,
+                5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,
+                4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,
+                6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21
+            }
+
+            local K = {
+                0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
+                0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+                0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be,
+                0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+                0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa,
+                0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+                0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed,
+                0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+                0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c,
+                0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+                0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05,
+                0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+                0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039,
+                0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
+                0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
+                0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
+            }
+
+            function MD5(message)
+                local a0 = 0x67452300
+                local b0 = 0xefcdab89
+                local c0 = 0x98badcfe
+                local d0 = 0x10325476
+                local originalLength = #message
+                local originalLengthBits = originalLength * 8
+                message = message .. string.char(0x80)
+                while (#message + 8) % 64 ~= 0 do
+                    message = message .. string.char(0x00)
+                end
+                local lenBytes = {}
+                for i = 1, 8 do
+                    lenBytes[i] = originalLengthBits % 256
+                    originalLengthBits = math.floor(originalLengthBits / 256)
+                end
+                message = message .. string.char(table.unpack(lenBytes))
+                for i = 1, #message, 64 do
+                    local chunk = message:sub(i, i + 63)
+                    local M = {}
+                    for j = 1, 16 do
+                        local word = chunk:sub((j-1)*4 + 1, j*4)
+                        local a, b, c, d = word:byte(1, 4)
+                        M[j] = a + b * 256 + c * 65536 + d * 16777216
+                    end
+                    local A, B, C, D = a0, b0, c0, d0
+                    for i = 0, 63 do
+                        local F, g
+                        if i <= 15 then
+                            F = bit_or(bit_and(B, C), bit_and(bit_not(B), D))
+                            g = i
+                        elseif i <= 31 then
+                            F = bit_or(bit_and(D, B), bit_and(bit_not(D), C))
+                            g = (5 * i + 1) % 16
+                        elseif i <= 47 then
+                            F = bit_xor(bit_xor(B, C), D)
+                            g = (3 * i + 5) % 16
+                        else
+                            F = bit_xor(C, bit_or(B, bit_not(D)))
+                            g = (7 * i) % 16
+                        end
+                        F = (F + A + K[i+1] + M[g+1]) % 0x100000000
+                        A = D
+                        D = C
+                        C = B
+                        B = (B + leftRotate(F, s[i+1])) % 0x100000000
+                    end
+                    a0 = (a0 + A) % 0x100000000
+                    b0 = (b0 + B) % 0x100000000
+                    c0 = (c0 + C) % 0x100000000
+                    d0 = (d0 + D) % 0x100000000
+                end
+                local function toLittleEndian(n)
+                    return string.char(
+                        n % 256,
+                        math.floor(n / 256) % 256,
+                        math.floor(n / 65536) % 256,
+                        math.floor(n / 16777216) % 256
+                    )
+                end
+                local digest = toLittleEndian(a0) .. toLittleEndian(b0) .. toLittleEndian(c0) .. toLittleEndian(d0)
+                local result = ""
+                for i = 1, #digest do
+                    result = result .. string.format("%02X", digest:byte(i))
+                end
+                return result
+            end
+
+        local function LoadScript()
+            ----------------------------------------脚本写这里----------------------------------------
+
+-- UI 初始化
+getgenv()._CONFIGS = { UI_NAME = "镜花水月99夜-优化版" }
+loadstring(game:HttpGet("https://pastebin.com/raw/CxxfciVn"))()
+
+-- 服务
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local Lighting = game:GetService("Lighting")
+
+local LP = Players.LocalPlayer
+local Character = LP.Character or LP.CharacterAdded:Wait()
+
+-- 全局变量/开关
+local ESPrange = 150
+local ActiveESPBillboards = {}
+local DistanceForAutoChopTree = 25
+_G.isCollecting = false
+local collectQuantity = 10
+
+-- 优化：收集设置
+local CollectSettings = {
+    MaxRetries = 3,              -- 最大重试次数
+    RetryDelay = 2,              -- 重试延迟(秒)
+    PickupDelay = 1,             -- 拾取后延迟(秒)
+    TeleportDelay = 0.5,         -- 传送后延迟(秒)
+    VerificationRange = 30,      -- 传送验证范围
+    SafetyDelay = 1.5           -- 安全延迟(秒)
+}
+
+local Features = {
+    KillAura = false,
+    AutoChop = false,
+    InstantInteract = false,
+    HealthAntiDeathTP = false,
+    NoFog = false,
+    GodMode = false
+}
+
+local CustomWalkSpeed = 16
+
+local DistanceAntiDeathEnabled = false
+local AntiDeathRadius = 50
+local AntiDeathTargets = {
+    Alien = true, ["Alpha Wolf"] = true, Wolf = true,
+    ["Crossbow Cultist"] = true, Cultist = true, Bear = true,
+}
+
+local AntiDeathHealthThreshold = 20
+local lastAntiDeathTrigger = 0
+
+local function ClearAllESP()
+    for key, value in pairs(getgenv()) do
+        if type(key) == "string" and key:match("^ESP_") then
+            if type(value) == "table" then
+                if value.guis then
+                    for _, gui in ipairs(value.guis) do if gui and gui.Parent then gui:Destroy() end end
+                end
+                if value.conn then value.conn:Disconnect() end
+            end
+            getgenv()[key] = nil
+        end
+    end
+    ActiveESPBillboards = {}
+    library:Notify({ Title = "提示", Text = "已清除所有透视", Duration = 2 })
+end
+
+-- 物品配置
+local espItemConfig = {
+    {name = "Log", display = "木头", espColor = Color3.fromRGB(139,69,19)},
+    {name = "Sapling", display = "树苗", espColor = Color3.fromRGB(34,139,34)},
+    {name = "Morsel", display = "肉", espColor = Color3.fromRGB(240,128,128)},
+    {name = "Carrot", display = "胡萝卜", espColor = Color3.fromRGB(255,165,0)},
+    {name = "Berry", display = "浆果", espColor = Color3.fromRGB(255,0,0)},
+    {name = "Bolt", display = "螺栓", espColor = Color3.fromRGB(255,255,0)},
+    {name = "Broken Fan", display = "风扇", espColor = Color3.fromRGB(100,100,100)},
+    {name = "Coal", display = "煤炭", espColor = Color3.fromRGB(0,0,0)},
+    {name = "Coin Stack", display = "钱堆", espColor = Color3.fromRGB(255,215,0)},
+    {name = "Fuel Canister", display = "燃料罐", espColor = Color3.fromRGB(255,50,50)},
+    {name = "Item Chest", display = "宝箱", espColor = Color3.fromRGB(210,180,140)},
+    {name = "Old Flashlight", display = "手电筒", espColor = Color3.fromRGB(200,200,200)},
+    {name = "Old Radio", display = "收音机", espColor = Color3.fromRGB(150,150,150)},
+    {name = "Rifle Ammo", display = "步枪子弹", espColor = Color3.fromRGB(150,75,0)},
+    {name = "Revolver Ammo", display = "左轮子弹", espColor = Color3.fromRGB(150,75,0)},
+    {name = "Sheet Metal", display = "金属板", espColor = Color3.fromRGB(192,192,192)},
+    {name = "Revolver", display = "左轮", espColor = Color3.fromRGB(75,75,75)},
+    {name = "Rifle", display = "步枪", espColor = Color3.fromRGB(75,75,75)},
+    {name = "Bandage", display = "绷带", espColor = Color3.fromRGB(255,240,245)},
+    {name = "Crossbow Cultist", display = "敌人", espColor = Color3.fromRGB(255,0,0)},
+    {name = "Bear", display = "熊", espColor = Color3.fromRGB(139,69,19)},
+    {name = "Alpha Wolf", display = "阿尔法狼", espColor = Color3.fromRGB(128,128,128)},
+    {name = "Wolf", display = "狼", espColor = Color3.fromRGB(192,192,192)},
+    {name = "Chair", display = "椅子", espColor = Color3.fromRGB(160,82,45)},
+    {name = "Tyre", display = "轮胎", espColor = Color3.fromRGB(20,20,20)},
+    {name = "Alien Chest", display = "外星宝箱", espColor = Color3.fromRGB(0,255,0)},
+    {name = "Leather Body", display = "皮革", espColor = Color3.fromRGB(0,255,255)},
+    {name = "Thorn Body", display = "荆棘铠甲", espColor = Color3.fromRGB(0,255,255)},
+    {name = "Iron Body", display = "铁甲", espColor = Color3.fromRGB(0,255,255)},
+    {name = "Chest", display = "宝箱", espColor = Color3.fromRGB(210,180,140)},
+    {name = "Lost Child", display = "走失的孩子", espColor = Color3.fromRGB(0,255,255)},
+    {name = "Lost Child1", display = "走失的孩子1", espColor = Color3.fromRGB(0,255,255)},
+    {name = "Lost Child2", display = "走失的孩子2", espColor = Color3.fromRGB(0,255,255)},
+    {name = "Lost Child3", display = "走失的孩子3", espColor = Color3.fromRGB(0,255,255)},
+    {name = "Dino Kid", display = "恐龙孩子", espColor = Color3.fromRGB(0,255,255)},
+    {name = "kraken kid", display = "海怪孩子", espColor = Color3.fromRGB(0,255,255)},
+    {name = "Squid kid", display = "鱿鱼孩子", espColor = Color3.fromRGB(0,255,255)},
+    {name = "Koala Kid", display = "考拉孩子", espColor = Color3.fromRGB(0,255,255)},
+    {name = "koala", display = "考拉", espColor = Color3.fromRGB(0,255,255)}
+}
+
+local teleportItemConfig = {
+    {name = "Log", display = "木头"}, {name = "Sapling", display = "树苗"}, {name = "Morsel", display = "肉"},
+    {name = "Carrot", display = "胡萝卜"}, {name = "Berry", display = "浆果"}, {name = "Bolt", display = "螺栓"},
+    {name = "Broken Fan", display = "风扇"}, {name = "Coal", display = "煤炭"}, {name = "Coin Stack", display = "钱堆"},
+    {name = "Fuel Canister", display = "燃料罐"}, {name = "Item Chest", display = "宝箱"}, {name = "Old Flashlight", display = "手电筒"},
+    {name = "Old Radio", display = "收音机"}, {name = "Rifle Ammo", display = "步枪子弹"}, {name = "Revolver Ammo", display = "左轮子弹"},
+    {name = "Sheet Metal", display = "金属板"}, {name = "Revolver", display = "左轮"}, {name = "Rifle", display = "步枪"},
+    {name = "Bandage", display = "绷带"}, {name = "Crossbow Cultist", display = "敌人"}, {name = "Bear", display = "熊"},
+    {name = "Alpha Wolf", display = "阿尔法狼"}, {name = "Wolf", display = "狼"}, {name = "Chair", display = "椅子"},
+    {name = "Tyre", display = "轮胎"}, {name = "Alien Chest", display = "外星宝箱"}, {name = "Leather Body", display = "皮革"},
+    {name = "Thorn Body", display = "荆棘铠甲"}, {name = "Iron Body", display = "铁甲"}, {name = "Chest", display = "宝箱"},
+    {name = "Lost Child", display = "走失的孩子"}, {name = "Lost Child1", display = "走失的孩子1"}, {name = "Lost Child2", display = "走失的孩子2"},
+    {name = "Lost Child3", display = "走失的孩子3"}, {name = "Dino Kid", display = "恐龙孩子"}, {name = "kraken kid", display = "海怪孩子"},
+    {name = "Squid kid", display = "鱿鱼孩子"}, {name = "Koala Kid", display = "考拉孩子"}, {name = "koala", display = "考拉"}
+}
+
+local collectItemConfig = {
+    {name = "Log", display = "木头"}, {name = "Sapling", display = "树苗"}, {name = "Morsel", display = "肉"},
+    {name = "Carrot", display = "胡萝卜"}, {name = "Berry", display = "浆果"}, {name = "Bolt", display = "螺栓"},
+    {name = "Broken Fan", display = "风扇"}, {name = "Coal", display = "煤炭"}, {name = "Coin Stack", display = "钱堆"},
+    {name = "Fuel Canister", display = "燃料罐"}, {name = "Item Chest", display = "宝箱"}, {name = "Old Flashlight", display = "手电筒"},
+    {name = "Old Radio", display = "收音机"}, {name = "Rifle Ammo", display = "步枪子弹"}, {name = "Revolver Ammo", display = "左轮子弹"},
+    {name = "Sheet Metal", display = "金属板"}, {name = "Revolver", display = "左轮"}, {name = "Rifle", display = "步枪"},
+    {name = "Bandage", display = "绷带"}, {name = "Chair", display = "椅子"}, {name = "Tyre", display = "轮胎"},
+    {name = "Leather Body", display = "皮革"}, {name = "Thorn Body", display = "荆棘铠甲"}, {name = "Iron Body", display = "铁甲"}
+}
+
+local BONFIRE_POSITION = Vector3.new(0.189, 7.831, -0.341)
+
+local originalLighting = {}
+local function setFog(enabled)
+    if enabled and not originalLighting.FogEnd then
+        originalLighting = {
+            FogEnd = Lighting.FogEnd, FogStart = Lighting.FogStart, Brightness = Lighting.Brightness,
+            Ambient = Lighting.Ambient, ColorShift_Top = Lighting.ColorShift_Top
+        }
+        Lighting.FogEnd = 100000
+        Lighting.FogStart = 0
+        Lighting.Brightness = 1
+        Lighting.Ambient = Color3.fromRGB(180, 180, 180)
+        Lighting.ColorShift_Top = Color3.fromRGB(255, 255, 255)
+    elseif not enabled and originalLighting.FogEnd then
+        Lighting.FogEnd = originalLighting.FogEnd
+        Lighting.FogStart = originalLighting.FogStart
+        Lighting.Brightness = originalLighting.Brightness
+        Lighting.Ambient = originalLighting.Ambient
+        Lighting.ColorShift_Top = originalLighting.ColorShift_Top
+        originalLighting = {}
+    end
+end
+
+local function findItems(itemName)
+    local found = {}
+    local folders = {"ltems", "Items", "MapItems", "WorldItems"}
+    for _, folderName in ipairs(folders) do
+        local folder = Workspace:FindFirstChild(folderName)
+        if folder then
+            for _, item in ipairs(folder:GetDescendants()) do
+                if item.Name == itemName and item:IsA("Model") then
+                    local primaryPart = item.PrimaryPart or item:FindFirstChild("HumanoidRootPart") or item:FindFirstChild("Handle")
+                    if primaryPart then
+                        table.insert(found, {model = item, part = primaryPart})
+                    end
+                end
+            end
+        end
+    end
+    return found
+end
+
+local function teleportToItem(itemName, displayName)
+    if not Character or not Character:FindFirstChild("HumanoidRootPart") then
+        library:Notify({ Title = "错误", Text = "角色未准备好", Duration = 2 })
+        return
+    end
+    local items = findItems(itemName)
+    if #items == 0 then
+        library:Notify({ Title = "提示", Text = "未找到"..displayName, Duration = 2 })
+        return
+    end
+    local closest, minDist = nil, math.huge
+    local charPos = Character.HumanoidRootPart.Position
+    for _, item in ipairs(items) do
+        local dist = (item.part.Position - charPos).Magnitude
+        if dist < minDist then
+            minDist = dist
+            closest = item.part
+        end
+    end
+    if closest then
+        Character:MoveTo(closest.Position + Vector3.new(0, 3, 0))
+        library:Notify({ Title = "成功", Text = "已传送到"..displayName, Duration = 2 })
+    end
+end
+
+local function teleportToBonfire()
+    if not Character or not Character:FindFirstChild("HumanoidRootPart") then
+        library:Notify({ Title = "错误", Text = "角色未准备好", Duration = 2 })
+        return
+    end
+    Character:MoveTo(BONFIRE_POSITION)
+    library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
+end
+
+-- 优化：改进背包物品统计
+local function getInventoryItemCount(itemName)
+    local inventory = LP:WaitForChild("Inventory")
+    local count = 0
+    for _, item in ipairs(inventory:GetChildren()) do
+        if item.Name == itemName then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+-- 优化：改进收集功能
+function collectAndDropLoop(itemName, displayName, quantity)
+    local MIN_SEARCH_DISTANCE = 15
+    
+    local rootPart = Character:WaitForChild("HumanoidRootPart")
+    local Humanoid = Character:WaitForChild("Humanoid")
+    local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
+    local initialPosition = rootPart.Position
+    local inventory = LP:WaitForChild("Inventory")
+    
+    local activeSack = nil
+    for _, item in ipairs(inventory:GetChildren()) do
+        if string.match(item.Name, "Sack$") then
+            activeSack = item
+            break
+        end
+    end
+
+    if not activeSack then
+        library:Notify({Title = "致命错误", Text = "找不到任何以 'Sack' 结尾的背包", Duration = 4})
+        _G.isCollecting = false
+        return
+    end
+    
+    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName .. "（优化版）", Duration = 3})
+
+    -- 优化：安全传送函数，增加错误检测
+    local function safeTeleport(targetPosition)
+        local beforePos = rootPart.Position
+        rootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 4, 0))
+        task.wait(CollectSettings.TeleportDelay)
+        
+        -- 检查传送是否成功
+        local afterPos = rootPart.Position
+        local distance = (afterPos - targetPosition).Magnitude
+        
+        if distance > CollectSettings.VerificationRange then
+            library:Notify({Title = "传送警告", Text = "传送距离异常：" .. math.floor(distance) .. "米", Duration = 3})
+            return false
+        end
+        
+        Humanoid.PlatformStand = true
+        task.wait(0.1)
+        Humanoid.PlatformStand = false
+        task.wait(CollectSettings.SafetyDelay)
+        return true
+    end
+
+    -- 优化：改进拾取检测，使用背包物品数量变化
+    local function pickupItemImproved(itemModelOrPart)
+        local beforeInventoryCount = getInventoryItemCount(itemName)
+        local success = false
+        
+        local ok, result = pcall(function()
+            local requestBagStore = RemoteEvents:WaitForChild("RequestBagStoreItem")
+            return requestBagStore:InvokeServer(activeSack, itemModelOrPart)
+        end)
+        
+        if not ok then
+            library:Notify({Title = "拾取错误", Text = "RemoteEvent调用失败", Duration = 2})
+            return false
+        end
+        
+        task.wait(CollectSettings.PickupDelay)
+        
+        local afterInventoryCount = getInventoryItemCount(itemName)
+        success = (afterInventoryCount > beforeInventoryCount)
+        
+        if success then
+            library:Notify({Title = "拾取成功", Text = "背包物品数量：" .. afterInventoryCount, Duration = 1})
+        else
+            library:Notify({Title = "拾取失败", Text = "背包物品数量未变化", Duration = 2})
+        end
+        
+        return success
+    end
+
+    -- 优化：丢弃函数，增加成功验证
+    local function dropItemAfterReturn(itemSample)
+        if not itemSample or not itemSample.Parent then 
+            library:Notify({Title = "丢弃错误", Text = "无效的丢弃目标", Duration = 2})
+            return false
+        end
+        
+        local beforeInventoryCount = getInventoryItemCount(itemName)
+        local success = false
+        
+        pcall(function()
+            local requestBagDrop = RemoteEvents:WaitForChild("RequestBagDropItem")
+            requestBagDrop:FireServer(activeSack, itemSample, true)
+            success = true
+        end)
+        
+        if success then
+            task.wait(0.5)
+            local afterInventoryCount = getInventoryItemCount(itemName)
+            if afterInventoryCount < beforeInventoryCount then
+                library:Notify({Title = "丢弃成功", Text = "背包物品数量：" .. afterInventoryCount, Duration = 1})
+                return true
+            end
+        end
+        
+        library:Notify({Title = "丢弃失败", Text = "物品可能未成功丢弃", Duration = 2})
+        return false
+    end
+
+    local function findTargets()
+        local allItems = {}
+        local foldersToSearch = {Workspace, Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems")}
+        for _, folder in pairs(foldersToSearch) do
+            if folder then
+                for _, item in ipairs(folder:GetChildren()) do
+                    if item.Name == itemName and (item:IsA("Model") or item:IsA("BasePart")) then
+                        table.insert(allItems, item)
+                    end
+                end
+            end
+        end
+        if #allItems == 0 then return nil, nil end
+        
+        local closestTarget, minDistance = nil, math.huge
+        for _, item in ipairs(allItems) do
+            local primaryPart = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart") or item
+            if primaryPart then
+                local distance = (primaryPart.Position - initialPosition).Magnitude
+                if distance < minDistance and distance > MIN_SEARCH_DISTANCE then
+                    minDistance = distance
+                    closestTarget = item
+                end
+            end
+        end
+        
+        local dropSample = nil
+        for _, item in ipairs(allItems) do
+            if item ~= closestTarget then dropSample = item; break end
+        end
+        if not dropSample and closestTarget then dropSample = closestTarget
+        elseif #allItems > 0 and not dropSample then dropSample = allItems[1] end
+        
+        return closestTarget, dropSample
+    end
+
+    -- 优化：添加重试机制的拾取函数
+    local function pickupWithRetry(pickupTarget)
+        for attempt = 1, CollectSettings.MaxRetries do
+            if not _G.isCollecting then break end
+            
+            library:Notify({Title = "尝试拾取", Text = "第 " .. attempt .. " 次尝试", Duration = 1})
+            
+            local success = pickupItemImproved(pickupTarget)
+            if success then
+                return true
+            end
+            
+            if attempt < CollectSettings.MaxRetries then
+                library:Notify({Title = "重试中", Text = "等待 " .. CollectSettings.RetryDelay .. " 秒后重试", Duration = 2})
+                task.wait(CollectSettings.RetryDelay)
+            end
+        end
+        
+        library:Notify({Title = "拾取失败", Text = "已达到最大重试次数", Duration = 3})
+        return false
+    end
+
+    -- 主收集循环
+    for i = 1, quantity do
+        if not _G.isCollecting then
+            library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。已完成 " .. (i-1) .. "/" .. quantity, Duration = 3})
+            break
+        end
+
+        library:Notify({Title = "收集进度", Text = "正在收集第 " .. i .. "/" .. quantity .. " 个" .. displayName, Duration = 2})
+
+        local pickupTarget, dropSample = findTargets()
+
+        if pickupTarget then
+            local targetPart = pickupTarget.PrimaryPart or pickupTarget:FindFirstChildWhichIsA("BasePart") or pickupTarget
+            
+            -- 传送到目标
+            local teleportSuccess = safeTeleport(targetPart.Position)
+            if not teleportSuccess then
+                library:Notify({Title = "传送失败", Text = "第 " .. i .. " 个目标传送失败，跳过", Duration = 3})
+                task.wait(2)
+                continue
+            end
+            
+            -- 尝试拾取（带重试）
+            local pickupSuccess = pickupWithRetry(pickupTarget)
+            
+            if pickupSuccess then
+                -- 返回初始位置
+                local returnSuccess = safeTeleport(initialPosition)
+                if not returnSuccess then
+                    library:Notify({Title = "返回失败", Text = "返回篝火失败，传送回篝火", Duration = 3})
+                    teleportToBonfire()
+                    task.wait(2)
+                end
+
+                -- 丢弃物品
+                if dropSample then
+                    dropItemAfterReturn(dropSample)
+                end
+                
+                library:Notify({Title = "收集成功", Text = "已完成 " .. i .. "/" .. quantity, Duration = 2})
+            else
+                library:Notify({Title = "收集失败", Text = "第 " .. i .. " 个物品拾取失败，继续下一个", Duration = 3})
+            end
+            
+            task.wait(CollectSettings.SafetyDelay)
+        else
+            library:Notify({Title = "搜索失败", Text = "找不到更多" .. displayName .. "，任务提前结束。已完成 " .. (i-1) .. "/" .. quantity, Duration = 4})
+            break
+        end
+    end
+    
+    if _G.isCollecting then
+        library:Notify({Title = "任务完成", Text = "所有收集任务已完成！共完成 " .. quantity .. " 个" .. displayName, Duration = 5})
+    end
+    _G.isCollecting = false
+end
+
+-- ESP
+local function toggleESP(itemName, displayName, color)
+    local espKey = "ESP_" .. itemName:gsub(" ", "_")
+    if getgenv()[espKey] then
+        local espData = getgenv()[espKey]
+        if espData.guis then
+            for _, gui in ipairs(espData.guis) do
+                for i, activeGui in ipairs(ActiveESPBillboards) do
+                    if activeGui == gui then
+                        table.remove(ActiveESPBillboards, i)
+                        break
+                    end
+                end
+                if gui and gui.Parent then gui:Destroy() end
+            end
+        end
+        if espData.conn then espData.conn:Disconnect() end
+        getgenv()[espKey] = nil
+        library:Notify({ Title = "提示", Text = "已关闭"..displayName.."透视", Duration = 2 })
+        return
+    end
+
+    local items = findItems(itemName)
+    getgenv()[espKey] = {guis = {}}
+
+    local function createESP(itemPart)
+        if not itemPart or not itemPart:IsDescendantOf(Workspace) then return end
+        local billboard = Instance.new("BillboardGui")
+        billboard.Adornee = itemPart
+        billboard.Size = UDim2.new(0, 100, 0, 40)
+        billboard.AlwaysOnTop = true
+        billboard.MaxDistance = ESPrange
+        local text = Instance.new("TextLabel")
+        text.Text = displayName
+        text.Size = UDim2.new(1, 0, 1, 0)
+        text.Font = Enum.Font.GothamBold
+        text.TextSize = 18
+        text.TextColor3 = color
+        text.BackgroundTransparency = 1
+        text.TextStrokeTransparency = 0.5
+        text.TextStrokeColor3 = Color3.new(0, 0, 0)
+        text.Parent = billboard
+        billboard.Parent = itemPart
+        table.insert(getgenv()[espKey].guis, billboard)
+        table.insert(ActiveESPBillboards, billboard)
+
+        local conn
+        conn = itemPart.AncestryChanged:Connect(function(_, parent)
+            if not parent then
+                if billboard then billboard:Destroy() end
+                if conn then conn:Disconnect() end
+            end
+        end)
+    end
+
+    for _, item in ipairs(items) do createESP(item.part) end
+
+    getgenv()[espKey].conn = Workspace.DescendantAdded:Connect(function(descendant)
+        if descendant.Name == itemName and descendant:IsA("Model") then
+            local primaryPart = descendant.PrimaryPart or descendant:FindFirstChild("HumanoidRootPart") or descendant:FindFirstChild("Handle")
+            if primaryPart then createESP(primaryPart) end
+        end
+    end)
+
+    library:Notify({ Title = "提示", Text = "已开启"..displayName.."透视 ("..#items.."个)", Duration = 2 })
+end
+
+-- 防死圈
+local detectionCircle = Instance.new("Part")
+detectionCircle.Name = "AntiDeathCircle"
+detectionCircle.Anchored = true
+detectionCircle.CanCollide = false
+detectionCircle.Transparency = 1 
+detectionCircle.Material = Enum.Material.Neon
+detectionCircle.Color = Color3.fromRGB(255, 0, 0)
+detectionCircle.Parent = Workspace
+local mesh = Instance.new("SpecialMesh", detectionCircle)
+mesh.MeshType = Enum.MeshType.Cylinder
+mesh.Scale = Vector3.new(AntiDeathRadius * 2, 0.2, AntiDeathRadius * 2)
+
+local function updateDetectionCircle()
+    local hrp = Character and Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        detectionCircle.Position = Vector3.new(hrp.Position.X, hrp.Position.Y - 3, hrp.Position.Z)
+        mesh.Scale = Vector3.new(AntiDeathRadius * 2, 0.2, AntiDeathRadius * 2)
+        detectionCircle.Transparency = DistanceAntiDeathEnabled and 0.5 or 1
+    else
+        detectionCircle.Transparency = 1
+    end
+end
+
+task.spawn(function()
+    while task.wait(0.2) do
+        if DistanceAntiDeathEnabled then
+            local hrp = Character and Character:FindFirstChild("HumanoidRootPart")
+            if hrp and Workspace:FindFirstChild("Characters") then
+                local pos = hrp.Position
+                for _, npc in ipairs(Workspace.Characters:GetChildren()) do
+                    if npc:IsA("Model") and npc:FindFirstChild("HumanoidRootPart") and AntiDeathTargets[npc.Name] then
+                        local npcPos = npc.HumanoidRootPart.Position
+                        if (npcPos - pos).Magnitude <= AntiDeathRadius then
+                            teleportToBonfire()
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ========== 自动种树与写字 ==========
+
+local PlantSettings = {
+    Radius = 10,
+    Count = 12,
+    Delay = 3,
+    IsPlanting = false,
+    ForcePlane = false,           -- 强制同一平面
+    PlaneY = BONFIRE_POSITION.Y   -- 平面高度
+}
+
+local function getGroundPosition(originPosition)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = {LP.Character}
+    local rayOrigin = originPosition + Vector3.new(0, 100, 0)
+    local rayDirection = Vector3.new(0, -200, 0)
+    local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    return raycastResult and raycastResult.Position or (originPosition - Vector3.new(0, 3, 0))
+end
+
+-- 自动写字（ASCII + 中文）
+local AutoWriteSettings = {
+    Spacing = 4,
+    IsWriting = false,
+    Text = "HELLO",
+    TargetCFrame = nil,
+    PreviewParts = {},
+    WritingBudget = 0 -- 0=自动等于需求
+}
+
+-- ASCII 字库
+local FontData = {
+    A = {" ## ", "#  #", "####", "#  #", "#  #"},
+    B = {"### ", "#  #", "### ", "#  #", "### "},
+    C = {" ###", "#   ", "#   ", "#   ", " ###"},
+    D = {"### ", "#  #", "#  #", "#  #", "### "},
+    E = {"####", "#   ", "### ", "#   ", "####"},
+    F = {"####", "#   ", "### ", "#   ", "#   "},
+    G = {" ###", "#   ", "# ##", "#  #", " ###"},
+    H = {"#  #", "#  #", "####", "#  #", "#  #"},
+    I = {"###", " # ", " # ", " # ", "###"},
+    J = {"  ##", "   #", "   #", "#  #", " ## "},
+    K = {"#  #", "# # ", "##  ", "# # ", "#  #"},
+    L = {"#   ", "#   ", "#   ", "#   ", "####"},
+    M = {"#  #", "## ##", "# ## #", "#    #", "#    #"},
+    N = {"#  #", "## #", "# ##", "#  #", "#  #"},
+    O = {" ### ", "#   #", "#   #", "#   #", " ### "},
+    P = {"### ", "#  #", "### ", "#   ", "#   "},
+    Q = {" ### ", "#   #", "#   #", "# # #", " ### #"},
+    R = {"### ", "#  #", "##  ", "# # ", "#  #"},
+    S = {" ###", "#   ", " ## ", "   #", "### "},
+    T = {"#####", "  #  ", "  #  ", "  #  ", "  #  "},
+    U = {"#  #", "#  #", "#  #", "#  #", " ## "},
+    V = {"#   #", "#   #", " # # ", " # # ", "  #  "},
+    W = {"#   #", "#   #", "# # #", "## ##", "#   #"},
+    X = {"#   #", " # # ", "  #  ", " # # ", "#   #"},
+    Y = {"#   #", " # # ", "  #  ", "  #  ", "  #  "},
+    Z = {"#####", "   # ", "  #  ", " #   ", "#####"},
+    ["1"] = {" #", "##", " #", " #", "###"},
+    ["2"] = {"###", "  #", "## ", "#  ", "####"},
+    ["3"] = {"###", "  #", "###", "  #", "###"},
+    ["4"] = {"# #", "# #", "###", "  #", "  #"},
+    ["5"] = {"####", "#   ", "###", "  #", "## "},
+    ["6"] = {"###", "#  ", "###", "# #", "###"},
+    ["7"] = {"####", "  #", " # ", " # ", " # "},
+    ["8"] = {"###", "# #", "###", "# #", "###"},
+    ["9"] = {"###", "# #", "####", "  #", "###"},
+    ["0"] = {"###", "# #", "# #", "# #", "###"}
+}
+
+-- 中文点阵（简化大字，便于树木摆放轮廓）
+local CNFontData = {
+    ["月"] = {
+        "########",
+        "#      #",
+        "#      #",
+        "####### ",
+        "#      #",
+        "####### ",
+        "#      #",
+        "#      #",
+        "########",
+    },
+    ["水"] = {
+        "    #    ",
+        "    #    ",
+        "   ###   ",
+        "  # # #  ",
+        " #  #  # ",
+        "    #    ",
+        "   # #   ",
+        "  #   #  ",
+        " #     # ",
+    },
+    ["花"] = {
+        " ####### ",
+        "   #     ",
+        " ####### ",
+        "  #   #  ",
+        " ####### ",
+        "   # #   ",
+        "  #   #  ",
+        " #     # ",
+    },
+    ["镜"] = {
+        "##  #####",
+        " #  #   #",
+        " #  #### ",
+        " #  #   #",
+        "##  #####",
+        "   # #   ",
+        "   ###   ",
+        "   # #   ",
+        "   # #   ",
+    },
+}
+
+-- 预览清除
+local function clearPreview()
+    for _, part in ipairs(AutoWriteSettings.PreviewParts) do
+        if part and part.Parent then part:Destroy() end
+    end
+    AutoWriteSettings.PreviewParts = {}
+    library:Notify({ Title = "提示", Text = "预览已清除", Duration = 2 })
+end
+
+-- 树苗计数工具
+local function getSaplingFolder()
+    local candidates = {"Items", "ltems", "WorldItems", "MapItems"}
+    for _, name in ipairs(candidates) do
+        local f = Workspace:FindFirstChild(name)
+        if f then return f end
+    end
+    return nil
+end
+local function countSaplingsIn(folder)
+    local n = 0
+    for _, ch in ipairs(folder:GetChildren()) do
+        if ch.Name == "Sapling" then n = n + 1 end
+    end
+    return n
+end
+local function countAvailableSaplings()
+    local f = getSaplingFolder()
+    return f and countSaplingsIn(f) or 0
+end
+
+-- 选择字符点阵（中文优先，其次ASCII）
+local function pickPattern(ch)
+    return CNFontData[ch] or FontData[ch] or FontData[string.upper(ch)]
+end
+
+-- 计算文字所需点数（支持中文/英文）
+local function countTextPoints(text)
+    local total = 0
+    text = tostring(text or "")
+    for i = 1, #text do
+        local ch = text:sub(i, i)
+        local pattern = pickPattern(ch)
+        if pattern then
+            for _, row in ipairs(pattern) do
+                for j = 1, #row do
+                    if row:sub(j, j) == "#" then
+                        total = total + 1
+                    end
+                end
+            end
+        end
+    end
+    return total
+end
+
+-- 生成网格点（基础 + 预算填充），修复镜像：列->负X，行->负Z
+local function buildTextPoints(text, spacing, budget)
+    text = tostring(text or "")
+    local gridBase, baseSet = {}, {}
+    local offsetX = 0
+
+    for i = 1, #text do
+        local ch = text:sub(i, i)
+        local pattern = pickPattern(ch)
+        if pattern then
+            local maxW = 0
+            for gy, row in ipairs(pattern) do
+                for gx = 1, #row do
+                    if row:sub(gx, gx) == "#" then
+                        local px = offsetX + (gx - 1)
+                        local py = (gy - 1)
+                        local key = px.."_"..py
+                        if not baseSet[key] then
+                            baseSet[key] = true
+                            table.insert(gridBase, {px, py})
+                        end
+                    end
+                end
+                maxW = math.max(maxW, #row)
+            end
+            offsetX = offsetX + maxW + 1
+        else
+            offsetX = offsetX + 3
+        end
+    end
+
+    local required = #gridBase
+    local extras = 0
+    if type(budget) == "number" and budget > 0 then
+        extras = math.max(0, budget - required)
+    end
+
+    local filler = {}
+    if extras > 0 then
+        local function addFiller(ax, ay, bx, by)
+            local mx = (ax + bx) / 2
+            local my = (ay + by) / 2
+            local key = ("%.2f_%.2f"):format(mx, my)
+            if not baseSet[key] then
+                baseSet[key] = true
+                table.insert(filler, {mx, my})
+            end
+        end
+        local map = {}
+        for _, p in ipairs(gridBase) do map[p[1]..","..p[2]] = true end
+        for _, p in ipairs(gridBase) do
+            local x,y = p[1], p[2]
+            local dirs = { {1,0},{0,1},{1,1},{1,-1},{2,0},{0,2} }
+            for _, d in ipairs(dirs) do
+                local nx, ny = x + d[1], y + d[2]
+                if map[nx..","..ny] then
+                    addFiller(x, y, nx, ny)
+                    if #filler >= extras then break end
+                end
+            end
+            if #filler >= extras then break end
+        end
+        local tries = 0
+        while #filler < extras and tries < extras * 5 do
+            tries = tries + 1
+            local p = gridBase[(tries % required) + 1]
+            local dx = (tries % 2 == 0) and 0.5 or -0.5
+            local dy = (tries % 3 == 0) and 0.5 or -0.5
+            local mx, my = p[1] + dx, p[2] + dy
+            local key = ("%.2f_%.2f"):format(mx, my)
+            if not baseSet[key] then
+                baseSet[key] = true
+                table.insert(filler, {mx, my})
+            end
+        end
+    end
+
+    local function toWorld(gx, gy, startCF)
+        local localPos = Vector3.new(-(gx) * spacing, 0, -(gy) * spacing)
+        return (startCF * CFrame.new(localPos)).Position
+    end
+
+    return gridBase, filler, required, toWorld
+end
+
+-- 写字预览（基础点 + 预算填充）
+local function generatePreview()
+    clearPreview()
+    if not AutoWriteSettings.TargetCFrame then
+        library:Notify({ Title = "错误", Text = "请先设置写字位置！", Duration = 3 })
+        return
+    end
+    local text = AutoWriteSettings.Text
+    local spacing = AutoWriteSettings.Spacing
+    local required = countTextPoints(text)
+    local budgetUse = AutoWriteSettings.WritingBudget > 0 and AutoWriteSettings.WritingBudget or required
+    local gridBase, filler, req, toWorld = buildTextPoints(text, spacing, budgetUse)
+    local total = #gridBase + #filler
+
+    for _, p in ipairs(gridBase) do
+        local part = Instance.new("Part")
+        part.Anchored = true; part.CanCollide = false
+        part.Size = Vector3.new(1,1,1); part.Material = Enum.Material.Neon
+        part.Color = Color3.fromRGB(0,255,255); part.Transparency = 0.5
+        part.Position = toWorld(p[1], p[2], AutoWriteSettings.TargetCFrame)
+        part.Parent = Workspace
+        table.insert(AutoWriteSettings.PreviewParts, part)
+    end
+    for _, p in ipairs(filler) do
+        local part = Instance.new("Part")
+        part.Anchored = true; part.CanCollide = false
+        part.Size = Vector3.new(0.8,0.8,0.8); part.Material = Enum.Material.Neon
+        part.Color = Color3.fromRGB(0,200,255); part.Transparency = 0.3
+        part.Position = toWorld(p[1], p[2], AutoWriteSettings.TargetCFrame)
+        part.Parent = Workspace
+        table.insert(AutoWriteSettings.PreviewParts, part)
+    end
+
+    library:Notify({ Title = "预览", Text = ("基础:%d  填充:%d  总计:%d"):format(#gridBase, #filler, total), Duration = 5 })
+end
+
+-- 单点种树（成功校验）
+local function getSaplingFolder()
+    local candidates = {"Items", "ltems", "WorldItems", "MapItems"}
+    for _, name in ipairs(candidates) do
+        local f = Workspace:FindFirstChild(name)
+        if f then return f end
+    end
+    return nil
+end
+local function plantSingleTreeAt(position)
+    local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
+    local folder = getSaplingFolder()
+    if not folder then return false end
+
+    local before = countSaplingsIn(folder)
+    local sapling = folder:FindFirstChild("Sapling")
+    if not sapling then return false end
+    
+    local groundPos = position
+    local ok, ret = pcall(function()
+        RemoteEvents.RequestStartDraggingItem:FireServer(sapling)
+        task.wait(0.1)
+        local res = RemoteEvents.RequestPlantItem:InvokeServer(sapling, groundPos)
+        task.wait(0.1)
+        RemoteEvents.StopDraggingItem:FireServer(sapling)
+        return res
+    end)
+    task.wait(0.2)
+    local after = countSaplingsIn(folder)
+    local success = (after < before)
+    if not success and type(ret) == "boolean" then success = ret end
+    return success
+end
+
+-- 写字执行（不做占用检测，直接尝试）
+local function startPlantingText()
+    if AutoWriteSettings.IsWriting then
+        library:Notify({ Title = "错误", Text = "已经在写字了！", Duration = 3 })
+        return
+    end
+    if not AutoWriteSettings.TargetCFrame then
+        library:Notify({ Title = "错误", Text = "请先设置写字位置！", Duration = 3 })
+        return
+    end
+    clearPreview()
+
+    local required = countTextPoints(AutoWriteSettings.Text or "")
+    local budget = AutoWriteSettings.WritingBudget > 0 and AutoWriteSettings.WritingBudget or required
+    local available = countAvailableSaplings()
+    if available <= 0 then
+        library:Notify({ Title = "错误", Text = "地上没有任何树苗！", Duration = 4 })
+        return
+    end
+    local target = math.min(budget, available)
+
+    local gridBase, filler, req, toWorld = buildTextPoints(AutoWriteSettings.Text, AutoWriteSettings.Spacing, target)
+    local points = {}
+    for _, p in ipairs(gridBase) do table.insert(points, p) end
+    for _, p in ipairs(filler) do table.insert(points, p) end
+
+    AutoWriteSettings.IsWriting = true
+    library:Notify({ Title = "开始写字", Text = ("目标种植:%d（需求:%d，现有:%d）"):format(target, required, available), Duration = 5 })
+
+    task.spawn(function()
+        local planted = 0
+        for idx, gp in ipairs(points) do
+            if not AutoWriteSettings.IsWriting then break end
+            local worldPos = toWorld(gp[1], gp[2], AutoWriteSettings.TargetCFrame)
+            local ok = plantSingleTreeAt(worldPos)
+            if not ok then
+                AutoWriteSettings.IsWriting = false
+                library:Notify({ Title = "错误", Text = ("第 %d 个点种植失败，任务中断。已种 %d/%d"):format(idx, planted, target), Duration = 6 })
+                break
+            end
+            planted = planted + 1
+            if planted >= target then break end
+            task.wait(0.5)
+        end
+
+        if planted >= target then
+            library:Notify({ Title = "完成", Text = ("写字完成！共种植 %d/%d。"):format(planted, target), Duration = 4 })
+        else
+            library:Notify({ Title = "未完成", Text = ("已种 %d/%d，树苗不足或失败中断。"):format(planted, target), Duration = 5 })
+        end
+        AutoWriteSettings.IsWriting = false
+    end)
+end
+
+-- 批量种树：不跳过、可强制同一平面
+local PlantPreview = {}
+local function clearPlantPreview()
+    for _, p in ipairs(PlantPreview) do if p and p.Parent then p:Destroy() end end
+    PlantPreview = {}
+end
+
+local function generatePlantPreview()
+    clearPlantPreview()
+    local centerPosition = BONFIRE_POSITION
+    for i = 1, PlantSettings.Count do
+        local angle = (2 * math.pi / PlantSettings.Count) * (i - 1)
+        local x_offset = PlantSettings.Radius * math.cos(angle)
+        local z_offset = PlantSettings.Radius * math.sin(angle)
+        local base = centerPosition + Vector3.new(x_offset, 0, z_offset)
+
+        local y = PlantSettings.ForcePlane and PlantSettings.PlaneY or getGroundPosition(base).Y
+        local finalPos = Vector3.new(base.X, y, base.Z)
+
+        local part = Instance.new("Part")
+        part.Anchored = true; part.CanCollide = false
+        part.Size = Vector3.new(1, 1, 1)
+        part.Material = Enum.Material.Neon
+        part.Color = Color3.fromRGB(0, 255, 0)
+        part.Transparency = 0.5
+        part.Position = finalPos
+        part.Parent = Workspace
+        table.insert(PlantPreview, part)
+    end
+    library:Notify({ Title = "预览", Text = ("已生成位置预览 %d 个点"):format(PlantSettings.Count), Duration = 3 })
+end
+
+local function startPlantingTrees()
+    if PlantSettings.IsPlanting then
+        library:Notify({ Title = "错误", Text = "已经在种树了！", Duration = 3 })
+        return
+    end
+    local folder = getSaplingFolder()
+    if not folder then
+        library:Notify({ Title = "错误", Text = "找不到物品文件夹（Items/ltems/WorldItems/MapItems）", Duration = 4 })
+        return
+    end
+    local available = countSaplingsIn(folder)
+    if available < PlantSettings.Count then
+        library:Notify({ Title = "提示", Text = ("树苗不足：需要 %d，现有 %d。"):format(PlantSettings.Count, available), Duration = 5 })
+        return
+    end
+
+    PlantSettings.IsPlanting = true
+    task.spawn(function()
+        local centerPosition = BONFIRE_POSITION
+        local planted, failed = 0, 0
+        for i = 1, PlantSettings.Count do
+            if not PlantSettings.IsPlanting then break end
+            local sapling = folder:FindFirstChild("Sapling")
+            if not sapling then
+                library:Notify({ Title = "提示", Text = "没有树苗了！", Duration = 3 })
+                break
+            end
+
+            local angle = (2 * math.pi / PlantSettings.Count) * (i - 1)
+            local x_offset = PlantSettings.Radius * math.cos(angle)
+            local z_offset = PlantSettings.Radius * math.sin(angle)
+            local base = centerPosition + Vector3.new(x_offset, 0, z_offset)
+
+            local y = PlantSettings.ForcePlane and PlantSettings.PlaneY or getGroundPosition(base).Y
+            local pos = Vector3.new(base.X, y, base.Z)
+
+            local ok = plantSingleTreeAt(pos)
+            if ok then planted = planted + 1 else failed = failed + 1 end
+
+            if i < PlantSettings.Count then task.wait(PlantSettings.Delay) end
+        end
+        library:Notify({ Title = "完成", Text = ("种树完成：成功 %d，失败 %d。"):format(planted, failed), Duration = 4 })
+        PlantSettings.IsPlanting = false
+    end)
+end
+
+-- 心跳逻辑
+local lastKillAura, lastAutoChop, lastGodModeTrigger = 0, 0, 0
+local connection
+RunService.Heartbeat:Connect(function()
+    local now = tick()
+    if not Character or not Character:FindFirstChild("HumanoidRootPart") or not Character:FindFirstChildOfClass("Humanoid") then
+        Character = LP.Character or LP.CharacterAdded:Wait()
+        return
+    end
+    local humanoid = Character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    if humanoid.WalkSpeed ~= CustomWalkSpeed then
+        humanoid.WalkSpeed = CustomWalkSpeed
+    end
+
+    updateDetectionCircle() 
+
+    if Features.HealthAntiDeathTP and humanoid.Health < AntiDeathHealthThreshold and now - lastAntiDeathTrigger > 5 then
+        lastAntiDeathTrigger = now
+        library:Notify({ Title = "警告", Text = "血量过低！正在传送回篝火...", Duration = 3 })
+        teleportToBonfire()
+    end
+    
+    if Features.GodMode and now - lastGodModeTrigger >= 0.5 then
+        lastGodModeTrigger = now
+        pcall(function()
+            local args = {[1] = -math.huge}
+            ReplicatedStorage.RemoteEvents.DamagePlayer:FireServer(unpack(args))
+        end)
+    end
+
+    if Features.InstantInteract then
+        if not connection then
+            connection = ProximityPromptService.PromptButtonHoldBegan:Connect(function(prompt)
+                if prompt then
+                    prompt.HoldDuration = 0
+                    if fireproximityprompt then
+                        fireproximityprompt(prompt)
+                    end
+                end
+            end)
+        end
+    else
+        if connection then connection:Disconnect(); connection = nil end
+    end
+
+    if Features.KillAura and now - lastKillAura >= 0.7 then
+        lastKillAura = now
+        if Character:FindFirstChild("ToolHandle") then
+            local tool = Character.ToolHandle.OriginalItem.Value
+            if tool and ({["Old Axe"] = true, ["Good Axe"] = true, ["Spear"] = true, ["Hatchet"] = true, ["Bone Club"] = true})[tool.Name] then
+                if Workspace:FindFirstChild("Characters") then
+                    for _, target in next, Workspace.Characters:GetChildren() do
+                        if target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") and target:FindFirstChild("HitRegisters") then
+                            if (Character.HumanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude <= 100 then
+                                ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("ToolDamageObject"):InvokeServer(target, tool, true, Character.HumanoidRootPart.CFrame)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if Features.AutoChop and now - lastAutoChop >= 0.1 then 
+        lastAutoChop = now
+        local hrp = Character:WaitForChild("HumanoidRootPart")
+        local weapon = (LP.Inventory:FindFirstChild("Old Axe") or LP.Inventory:FindFirstChild("Good Axe") or LP.Inventory:FindFirstChild("Strong Axe") or LP.Inventory:FindFirstChild("Chainsaw"))
+        if weapon and Workspace:FindFirstChild("Map") then
+            local function ChopTree(path)
+                for _, tree in pairs(path:GetChildren()) do
+                    if tree:IsA("Model") and (tree.Name == "Small Tree" or tree.Name == "TreeBig1" or tree.Name == "TreeBig2") and tree.PrimaryPart then
+                        local distance = (tree.PrimaryPart.Position - hrp.Position).Magnitude
+                        if distance <= DistanceForAutoChopTree then
+                            ReplicatedStorage.RemoteEvents.ToolDamageObject:InvokeServer(tree, weapon, 999, hrp.CFrame)
+                        end
+                    end
+                end
+            end
+            if Workspace.Map:FindFirstChild("Foliage") then
+                ChopTree(Workspace.Map.Foliage)
+            end
+            if Workspace.Map:FindFirstChild("Landmarks") then
+                ChopTree(Workspace.Map.Landmarks)
+            end
+        end
+    end
+
+end)
+
+-- 玩家列表
+local PlayerList = {}
+local function UpdatePlayerList()
+    PlayerList = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        table.insert(PlayerList, player.Name)
+    end
+    if library and library.flags and library.flags["Player_Teleport"] and library.flags["Player_Teleport"].SetOptions then
+        library.flags["Player_Teleport"]:SetOptions(PlayerList)
+    end
+end
+Players.PlayerAdded:Connect(UpdatePlayerList)
+Players.PlayerRemoving:Connect(UpdatePlayerList)
+
+-- UI 构造
+local MainTab = library:CreateTab("主要功能")
+MainTab:NewButton("注意: 自动功能需要装备对应工具", function() end)
+MainTab:NewSeparator()
+MainTab:NewToggle("杀戮光环 (范围固定)", "Kill_Aura", false, function(value)
+    Features.KillAura = value
+    library:Notify({ Title = "提示", Text = value and "已开启杀戮光环" or "已关闭杀戮光环", Duration = 2 })
+end)
+MainTab:NewToggle("锁血 (God Mode)", "God_Mode", false, function(value)
+    Features.GodMode = value
+    library:Notify({ Title = "提示", Text = value and "已开启锁血" or "已关闭锁血", Duration = 2 })
+end)
+MainTab:NewSeparator()
+MainTab:NewSlider("自动砍树范围 (米)", "Auto_Chop_Distance", 25, 25, 500, false, function(value)
+    DistanceForAutoChopTree = value
+end)
+MainTab:NewToggle("自动砍树", "Auto_Chop_Toggle", false, function(value)
+    Features.AutoChop = value
+    library:Notify({ Title = "提示", Text = value and "已开启自动砍树" or "已关闭自动砍树", Duration = 2 })
+end)
+MainTab:NewSeparator()
+MainTab:NewToggle("瞬间互动", "Instant_Interact", false, function(value)
+    Features.InstantInteract = value
+    library:Notify({ Title = "提示", Text = value and "已开启瞬间互动" or "已关闭瞬间互动", Duration = 2 })
+end)
+MainTab:NewSeparator()
+MainTab:NewSlider("移动速度", "walk_speed", 16, 16, 200, false, function(value)
+    CustomWalkSpeed = value
+    library:Notify({ Title = "设置更新", Text = "移动速度已设置为: " .. value, Duration = 2 })
+end)
+MainTab:NewSeparator()
+MainTab:NewToggle("防死传送(低血量)", "Health_AntiDeath_TP", false, function(value)
+    Features.HealthAntiDeathTP = value
+    library:Notify({ Title = "提示", Text = value and "已开启低血量防死传送" or "已关闭低血量防死传送", Duration = 2 })
+end)
+MainTab:NewToggle("去除迷雾", "No_Fog", false, function(value)
+    Features.NoFog = value
+    setFog(value)
+    library:Notify({ Title = "提示", Text = value and "已去除迷雾" or "已恢复迷雾", Duration = 2 })
+end)
+MainTab:NewSeparator()
+MainTab:NewButton("传送回篝火", teleportToBonfire)
+
+local ESPTab = library:CreateTab("物品透视")
+ESPTab:NewSlider("透视范围 (米)", "ESP_Range", 150, 50, 1000, false, function(value)
+    ESPrange = value
+    for _, billboard in ipairs(ActiveESPBillboards) do
+        if billboard and billboard.Parent then
+            billboard.MaxDistance = ESPrange
+        end
+    end
+end)
+ESPTab:NewSeparator()
+for _, item in ipairs(espItemConfig) do
+    ESPTab:NewButton(item.display.."透视", function() 
+        toggleESP(item.name, item.display, item.espColor) 
+    end)
+end
+
+local TeleportTab = library:CreateTab("传送功能")
+UpdatePlayerList()
+TeleportTab:NewDropdown("选择玩家", "Player_Teleport", PlayerList, function(selected)
+    local target = Players[selected]
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        Character:PivotTo(target.Character.HumanoidRootPart.CFrame)
+        library:Notify({ Title = "成功", Text = "已传送到玩家 "..selected, Duration = 2 })
+    else
+        library:Notify({ Title = "错误", Text = "无法传送到该玩家", Duration = 2 })
+    end
+end)
+TeleportTab:NewSeparator()
+for _, item in ipairs(teleportItemConfig) do
+    TeleportTab:NewButton("传送到"..item.display, function()
+        teleportToItem(item.name, item.display)
+    end)
+end
+
+local CollectTab = library:CreateTab("收集功能-优化版")
+CollectTab:NewButton("停止当前收集任务", function()
+    if _G.isCollecting then
+        _G.isCollecting = false
+        library:Notify({Title = "操作成功", Text = "收集任务将在当前循环结束后停止。", Duration = 3})
+    else
+        library:Notify({Title = "提示", Text = "当前没有正在运行的收集任务。", Duration = 3})
+    end
+end)
+CollectTab:NewBox("自定义收集数量", "10", function(text)
+    local num = tonumber(text)
+    if num and num > 0 then
+        collectQuantity = math.floor(num)
+        library:Notify({Title = "设置成功", Text = "下次收集数量已设为: " .. collectQuantity, Duration = 3})
+    else
+        library:Notify({Title = "输入错误", Text = "请输入一个有效的正整数。", Duration = 3})
+    end
+end)
+
+-- 优化：添加收集设置
+CollectTab:NewSeparator()
+CollectTab:NewButton("=== 收集优化设置 ===", function() end)
+CollectTab:NewSlider("最大重试次数", "Max_Retries", CollectSettings.MaxRetries, 1, 10, false, function(value)
+    CollectSettings.MaxRetries = value
+    library:Notify({Title = "设置", Text = "最大重试次数: " .. value, Duration = 2})
+end)
+CollectTab:NewSlider("重试延迟(秒)", "Retry_Delay", CollectSettings.RetryDelay, 1, 10, true, function(value)
+    CollectSettings.RetryDelay = value
+    library:Notify({Title = "设置", Text = "重试延迟: " .. value .. "秒", Duration = 2})
+end)
+CollectTab:NewSlider("拾取延迟(秒)", "Pickup_Delay", CollectSettings.PickupDelay, 0.5, 5, true, function(value)
+    CollectSettings.PickupDelay = value
+    library:Notify({Title = "设置", Text = "拾取延迟: " .. value .. "秒", Duration = 2})
+end)
+CollectTab:NewSlider("安全延迟(秒)", "Safety_Delay", CollectSettings.SafetyDelay, 0.5, 5, true, function(value)
+    CollectSettings.SafetyDelay = value
+    library:Notify({Title = "设置", Text = "安全延迟: " .. value .. "秒", Duration = 2})
+end)
+
+CollectTab:NewSeparator()
+for _, item in ipairs(collectItemConfig) do
+    CollectTab:NewButton("循环收集: "..item.display.." (优化版)", function()
+        if _G.isCollecting then
+            library:Notify({Title = "错误", Text = "已有收集任务在运行！请先停止。", Duration = 3})
+            return
+        end
+        _G.isCollecting = true
+        task.spawn(function()
+            collectAndDropLoop(item.name, item.display, collectQuantity)
+        end)
+    end)
+end
+
+-- 种树板块（Section区分）
+local TreeTab = library:CreateTab("种树板块")
+local function addSection(tab, title)
+    if tab.NewSection then
+        tab:NewSection(title)
+    else
+        tab:NewSeparator()
+        tab:NewButton(("—— %s ——"):format(title), function() end)
+    end
+end
+
+TreeTab:NewButton("刷新地上树苗数量", function()
+    local n = countAvailableSaplings()
+    library:Notify({ Title = "树苗数量", Text = ("当前地上树苗：%d"):format(n), Duration = 3 })
+end)
+
+addSection(TreeTab, "自动写字")
+TreeTab:NewButton("设置写字位置（当前站立位置）", function()
+    local hrp = Character and Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        AutoWriteSettings.TargetCFrame = hrp.CFrame
+        library:Notify({ Title = "成功", Text = "写字位置已设置！", Duration = 3 })
+        clearPreview()
+    else
+        library:Notify({ Title = "错误", Text = "找不到玩家！", Duration = 3 })
+    end
+end)
+TreeTab:NewBox("写字内容（中文/英文/数字）", "Auto_Write_Text", function(text)
+    AutoWriteSettings.Text = text
+end)
+TreeTab:NewSlider("字间距", "Auto_Write_Spacing", AutoWriteSettings.Spacing, 2, 8, false, function(v)
+    AutoWriteSettings.Spacing = v
+end)
+TreeTab:NewBox("写字预算(棵，0=自动)", "Auto_Write_Budget", function(text)
+    local num = tonumber(text) or 0
+    AutoWriteSettings.WritingBudget = math.max(0, math.floor(num))
+    library:Notify({ Title = "设置", Text = ("写字树苗预算已设置为：%d（0=自动按需求）"):format(AutoWriteSettings.WritingBudget), Duration = 3 })
+end)
+TreeTab:NewButton("预览文字", generatePreview)
+TreeTab:NewButton("清除预览", clearPreview)
+TreeTab:NewButton("开始写字", startPlantingText)
+TreeTab:NewButton("一键填入（中文）：镜花水月", function()
+    AutoWriteSettings.Text = "镜花水月"
+    library:Notify({ Title = "已填入", Text = "已设置文本：镜花水月", Duration = 3 })
+end)
+TreeTab:NewButton("一键开始（中文）：镜花水月", function()
+    AutoWriteSettings.Text = "镜花水月"
+    library:Notify({ Title = "开始写字", Text = "准备种出：镜花水月", Duration = 3 })
+    startPlantingText()
+end)
+TreeTab:NewButton("停止写字", function()
+    if AutoWriteSettings.IsWriting then
+        AutoWriteSettings.IsWriting = false
+        library:Notify({ Title = "操作成功", Text = "写字任务已停止。", Duration = 3 })
+    end
+end)
+
+addSection(TreeTab, "自动种树")
+TreeTab:NewSlider("种树半径 (米)", "Plant_Radius", PlantSettings.Radius, 5, 50, false, function(v) PlantSettings.Radius = v end)
+TreeTab:NewSlider("种植数量 (棵)", "Plant_Count", PlantSettings.Count, 1, 100, false, function(v) PlantSettings.Count = v end)
+TreeTab:NewSlider("种植间隔 (秒)", "Plant_Delay", PlantSettings.Delay, 0.5, 10, true, function(v) PlantSettings.Delay = v end)
+TreeTab:NewToggle("强制同一平面", "Plant_ForcePlane", false, function(v)
+    PlantSettings.ForcePlane = v
+    library:Notify({ Title = "设置", Text = "强制同一平面已" .. (v and "开启" or "关闭"), Duration = 3 })
+end)
+TreeTab:NewButton("平面设为篝火高度", function()
+    PlantSettings.PlaneY = BONFIRE_POSITION.Y
+    library:Notify({ Title = "设置", Text = "平面高度已设为篝火高度: "..tostring(PlantSettings.PlaneY), Duration = 3 })
+end)
+TreeTab:NewButton("平面设为脚下地面高度", function()
+    local hrp = Character and Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        local gy = getGroundPosition(hrp.Position).Y
+        PlantSettings.PlaneY = gy
+        library:Notify({ Title = "设置", Text = "平面高度已设为脚下地面Y: "..tostring(gy), Duration = 3 })
+    end
+end)
+TreeTab:NewBox("自定义平面高度Y(数字)", "Plant_PlaneY", function(text)
+    local n = tonumber(text)
+    if n then
+        PlantSettings.PlaneY = n
+        library:Notify({ Title = "设置", Text = "平面高度已设为: "..tostring(n), Duration = 3 })
+    else
+        library:Notify({ Title = "错误", Text = "请输入有效数字", Duration = 3 })
+    end
+end)
+TreeTab:NewButton("显示位置预览", generatePlantPreview)
+TreeTab:NewButton("清除位置预览", clearPlantPreview)
+TreeTab:NewButton("开始自动种树", startPlantingTrees)
+
+-- 防死设置
+local AntiDeathTab = library:CreateTab("防死设置")
+AntiDeathTab:NewToggle("敌人靠近时传送", "Distance_AntiDeath_Toggle", false, function(value)
+    DistanceAntiDeathEnabled = value
+    library:Notify({ Title = "提示", Text = "敌人靠近传送已" .. (value and "开启" or "关闭"), Duration = 2 })
+end)
+AntiDeathTab:NewSlider("检测半径 (米)", "AntiDeath_Radius", 50, 10, 150, false, function(value)
+    AntiDeathRadius = value
+end)
+for npcName, _ in pairs(AntiDeathTargets) do
+    AntiDeathTab:NewToggle("规避 " .. npcName, "Avoid_"..npcName:gsub(" ", "_"), true, function(value)
+        AntiDeathTargets[npcName] = value or nil
+    end)
+end
+
+local SettingsTab = library:CreateTab("设置")
+SettingsTab:NewSlider("低血量防死阈值", "AntiDeath_Threshold", 20, 10, 90, false, function(value)
+    AntiDeathHealthThreshold = value
+    library:Notify({ Title = "设置", Text = "低血量防死阈值已设置为: " .. value, Duration = 2 })
+end)
+SettingsTab:NewButton("清除所有透视", ClearAllESP)
+
+library:Notify({
+    Title = "欢迎使用镜花水月-优化版",
+    Text = "已优化收集功能稳定性，支持重试机制和详细状态监控！",
+    Duration = 5
+})
+if setclipboard then
+    setclipboard("1056584995")
+    library:Notify({
+        Title = "提示",
+        Text = "已自动复制交流群号: 1056584995",
+        Duration = 5
+    })
+end
+
+            ----------------------------------------脚本写这里----------------------------------------
+
+        end
+        
+        local function Check_Functions_Is_Hooked(Function)
+            if isfunctionhooked(Function) then
+                kick("[Function][Hooker]")
+            end   
+        end
+
+    -- Gui 检测
+        print("2")
+        game.DescendantAdded:Connect(function(Objects)
+            for _,v in ipairs({"github", "pastebin", "pythonanywhere"}) do
+                if string.find(string.lower(tostring(Objects.Name)), v) or string.find(tostring(Objects.Name), v) then
+                    Objects.Name = "[南天门]"
+                    Objects:Destroy()
+                    kick("请重新尝试[Hook][21]")
+                end
+
+                if Objects:IsA("TextLabel") or Objects:IsA("TextButton") or Objects:IsA("TextBox") or Objects:IsA("Message") then
+                    if string.find(string.lower(tostring(Objects.Text)), tostring(v)) or string.find(tostring(Objects.Text), tostring(v)) or string.find(tostring(Objects.Text), string.lower(tostring(v))) then
+                        Objects.Text = "[南天门]"
+                        Objects:Destroy()
+                        kick("请重新尝试[Hook][22]")
+                    end
+                end
+            end
+        end)
+
+
+    -- 网络验证 & 时间验证
+        print("3")
+        local Key = request({
+            Url = "https://users.roblox.com/v1/users/"..game:GetService("Players").LocalPlayer.UserId,
+            Method = "GET"
+        }).Body
+        local json = game:GetService("HttpService"):JSONDecode(Key)
+        local time = json.created:split("T")[1]
+        local local_time = os.date("!*t", os.time() - (game:GetService("Players").LocalPlayer.AccountAge*86400))
+
+        local year = local_time.year
+        local month = local_time.month
+        local day = local_time.day
+        if string.len(tostring(month)) == 1 then
+            month = string.format("0%s", month)
+        end
+
+        if string.len(tostring(day)) == 1 then
+            day = string.format("0%s", day)
+        end
+
+        if not (time == string.format("%s-%s-%s", year, month, day)) then
+            if not ((tonumber(local_time.day) - tonumber(day)) < 1 and (tonumber(day) - tonumber(local_time.day)) > -1) then
+                kick("请重新尝试[1][1]")
+            end
+        end
+
+        if json.displayName ~= game:GetService("Players").LocalPlayer.DisplayName then
+            kick("请重新尝试[1][2]")
+        end
+
+
+        for _, v in getgc() do
+            if typeof(v) == "function" then
+                Check_Functions_Is_Hooked(v)
+            end
+        end
+        for _, v in getfenv() do
+            if typeof(v) == "function" then
+                Check_Functions_Is_Hooked(v)
+            end
+        end
+        for _, v in getgenv() do
+            if typeof(v) == "function" then
+                Check_Functions_Is_Hooked(v)
+            end
+        end
+
+        local File_Function = {
+            readfile,
+            writefile,
+            appendfile,
+            loadfile,
+            listfiles,
+            isfile,
+            isfolder,
+            makefolder,
+            delfolder,
+            delfile,
+        }
+        for _,v in pairs(File_Function) do
+            if isfunctionhooked(v) then
+                kick("[Function][Hooker]")
+            end
+            local Original_Function = clonefunction(v)
+            hookfunction(v, print)
+            if not isfunctionhooked(v) then
+                kick("[Function][Hooker]")
+            end
+            hookfunction(v, Original_Function)
+        end
+    -- 黑名单
+        print("4")
+        Time = os.time()
+        local Key =  request({Url = "https://nantianmen.pythonanywhere.com/90E231834249308F9155428C7C0E06A9",Method = "POST",Headers = {["Content-Type"] = "application/json"},
+        Body = game:GetService("HttpService"):JSONEncode({
+            [randomString(math.random(50))] = Base64_enc(randomString(math.random(50))),
+            ["username"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*30) .. "|" .. game:GetService("Players").LocalPlayer.Character.Name),
+            ["Time"] = Base64_enc(tostring(Time*250)),
+            ["Check"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*666) .. "|" .. MD5(Base64_enc(tostring(Time*30) .. "|" .. game:GetService("Players").LocalPlayer.Character.Name)..Base64_enc(tostring(Time*250)) )),
+        })})
+        local Content = Base64_dec(Key.Body)
+        local Key = string.split(Content, "|")
+        if (Key[1])-Time>30 or (Key[1])-Time<-30 then
+            kick("[Black]时间验证失败")
+        end
+        if MD5('By NanTianMen_Content:' .. game:GetService("Players").LocalPlayer.Character.Name .. ' True') == Key[2] then 
+            kick("[南天门]你已被加入黑名单")
+        end
+
+    -- 加载脚本 & 基础验证
+        print("5")
+
+
+        if game:GetService("Players").LocalPlayer.Name == game:GetService("Players").LocalPlayer.Character.Name and game:GetService("Players").LocalPlayer.CharacterAppearanceId == game:GetService("Players").LocalPlayer.UserId and game:GetService("Players"):GetUserIdFromNameAsync(game:GetService("Players").LocalPlayer.Name) == game:GetService("Players").LocalPlayer.UserId then
+            Time = os.time()
+            local Key =  request({Url = "https://nantianmen.pythonanywhere.com/6F1C5EB044796E5224D24B2373F5544B",Method = "POST",Headers = {["Content-Type"] = "application/json"},
+            Body = game:GetService("HttpService"):JSONEncode({
+                [randomString(math.random(50))] = Base64_enc(randomString(math.random(50))),
+                ["script_id"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*20) .. "|" .. _Script_id),
+                ["username"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*30) .. "|" .. game:GetService("Players").LocalPlayer.Character.Name),
+                ["Time"] = Base64_enc(tostring(Time*250)),
+                ["Check"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*666) .. "|" .. MD5(Base64_enc(tostring(Time*20) .. "|" .. _Script_id)..Base64_enc(game:GetService("Players").LocalPlayer.Character.Name) .. Base64_enc(tostring(Time*250))    )  ),
+            })})
+            local Content = Base64_dec(Key.Body)
+            local Key = string.split(Content, "|")
+            if (Key[1])-Time>30 or (Key[1])-Time<-30 then
+                print("时间验证失败")
+            end
+            if MD5('By NanTianMen_Content:' .. game:GetService("Players").LocalPlayer.Character.Name .. ' True') == Key[2] then
+                LoadScript()
+            else
+                Time = os.time()
+                local Key =  request({Url = "https://nantianmen.pythonanywhere.com/6F1C5EB044796E5224D24B2373F5544B",Method = "POST",Headers = {["Content-Type"] = "application/json"},
+                Body = game:GetService("HttpService"):JSONEncode({
+                    [randomString(math.random(50))] = Base64_enc(randomString(math.random(50))),
+                    ["script_id"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*20) .. "|" .. _Script_id),
+                    ["username"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*30) .. "|" .. game:GetService("Players").LocalPlayer.Character.Name),
+                    ["Time"] = Base64_enc(tostring(Time*250)),
+                    ["Check"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*666) .. "|" .. MD5(Base64_enc(tostring(Time*20) .. "|" .. _Script_id)..Base64_enc(game:GetService("Players").LocalPlayer.Character.Name) .. Base64_enc(tostring(Time*250))    )  ),
+                })})
+                local Content = Base64_dec(Key.Body)
+                local Key = string.split(Content, "|")
+                if (Key[1])-Time>30 or (Key[1])-Time<-30 then
+                    print("时间验证失败")
+                end
+                if MD5('By NanTianMen_Content:' .. game:GetService("Players").LocalPlayer.Character.Name .. ' True') == Key[2] then
+                    LoadScript()
+                else
+                    game:GetService("Players").LocalPlayer:Kick(_Kick)
+                    wait(3)
+                    game:shutdown()
+                    wait(1)
+                    while true do end
+                end
+            end
+        else
+            kick("请重新尝试[3][3]")
+        end
+else
+    Message("请勿重新加载", 3)
+end
