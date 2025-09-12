@@ -1,241 +1,4 @@
-local function Message(ConTent, Time)
-    spawn(function()
-        local Message = Instance.new("Message",game:GetService("Workspace"))
-        Message.Text = ConTent
-        wait(Time)
-        Message:Destroy()
-    end)
-end
-
-if not _G.NanTianMen then
-    _G.NanTianMen = true
-    print("NanTianMen Load")
-    Message("加载中,请耐心等待", 5)
-    -- 预制部分/函数部分
-        local _Kick = game:GetService("Players").LocalPlayer.Character.Name.."你未列入白名单" -- 踢出提示
-        local _Script_id = "C"
-        -- 脚本写40行
-
-        local function kick(text)
-            game:GetService("Players").LocalPlayer:Kick(text)
-            wait(3)
-            game:shutdown()
-            wait(1)
-            kick("(404)")
-            while true do end
-        end
-
-        local function randomString(length)
-            local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456"
-            local name = ""
-            for i = 1, length do
-                local rand = math.random(#chars)
-                name = name .. chars:sub(rand, rand)
-            end
-            return name
-        end
-        
-
-
-        -- Base64
-            local base64 = "S5GHIJOUjPQ63team+EsugAb24qr01lNBRDFn9oZKLTM78wxyz/dVWfXkYChpicv"
-            local function Base64_enc(data) return ((data:gsub('.', function(x) local r,base64='',x:byte() for i=8,1,-1 do r=r..(base64%2^i-base64%2^(i-1)>0 and '1' or '0') end return r; end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x) if (#x < 6) then return '' end local c=0 for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end return base64:sub(c+1,c+1) end)..({ '', '==', '=' })[#data%3+1]) end
-            local function Base64_dec(data) data = string.gsub(data, '[^'..base64..'=]', '') return (data:gsub('.', function(x) if (x == '=') then return '' end local r,f='',(base64:find(x)-1) for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end return r; end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x) if (#x ~= 8) then return '' end local c=0 for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end return string.char(c) end)) end
-
-            local base64 = '7CXv+Esugy2PamteAbKL4hic/Q6VWlIJOUSq3zNBRpfdDFn8xr5GH01oZ9kYjTwM'
-            local function Base64_enc_Args(data) return ((data:gsub('.', function(x) local r,base64='',x:byte() for i=8,1,-1 do r=r..(base64%2^i-base64%2^(i-1)>0 and '1' or '0') end return r; end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x) if (#x < 6) then return '' end local c=0 for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end return base64:sub(c+1,c+1) end)..({ '', '==', '=' })[#data%3+1]) end
-            local function Base64_dec_Args(data) data = string.gsub(data, '[^'..base64..'=]', '') return (data:gsub('.', function(x) if (x == '=') then return '' end local r,f='',(base64:find(x)-1) for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end return r; end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x) if (#x ~= 8) then return '' end local c=0 for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end return string.char(c) end)) end
-
-        -- MD5
-            -- MD5 加密算法 Lua 实现（Roblox 兼容版）
-            -- 位运算辅助函数（Roblox 兼容）
-            local function bit_and(a, b)
-                local result = 0
-                local bit = 1
-                while a > 0 and b > 0 do
-                    if a % 2 == 1 and b % 2 == 1 then
-                        result = result + bit
-                    end
-                    a = math.floor(a / 2)
-                    b = math.floor(b / 2)
-                    bit = bit * 2
-                end
-                return result
-            end
-
-            local function bit_or(a, b)
-                local result = 0
-                local bit = 1
-                while a > 0 or b > 0 do
-                    if a % 2 == 1 or b % 2 == 1 then
-                        result = result + bit
-                    end
-                    a = math.floor(a / 2)
-                    b = math.floor(b / 2)
-                    bit = bit * 2
-                end
-                return result
-            end
-
-            local function bit_xor(a, b)
-                local result = 0
-                local bit = 1
-                while a > 0 or b > 0 do
-                    if a % 2 ~= b % 2 then
-                        result = result + bit
-                    end
-                    a = math.floor(a / 2)
-                    b = math.floor(b / 2)
-                    bit = bit * 2
-                end
-                return result
-            end
-
-            local function bit_not(a)
-                return 0xFFFFFFFF - a
-            end
-
-            local function leftRotate(x, c)
-                x = x % 0x100000000  -- 确保是32位
-                return bit_or((x * (2^c)) % 0x100000000, math.floor(x / (2^(32-c))))
-            end
-
-            -- 常量表
-            local s = {
-                7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,
-                5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,
-                4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,
-                6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21
-            }
-
-            local K = {
-                0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
-                0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
-                0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be,
-                0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
-                0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa,
-                0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
-                0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed,
-                0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
-                0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c,
-                0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
-                0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05,
-                0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
-                0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039,
-                0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
-                0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
-                0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
-            }
-
-            -- 主函数
-            function MD5(message)
-                -- 初始哈希值
-                local a0 = 0x67452300
-                local b0 = 0xefcdab89
-                local c0 = 0x98badcfe
-                local d0 = 0x10325476
-                
-                -- 预处理消息
-                local originalLength = #message
-                local originalLengthBits = originalLength * 8
-                
-                -- 添加填充位
-                message = message .. string.char(0x80)
-                while (#message + 8) % 64 ~= 0 do
-                    message = message .. string.char(0x00)
-                end
-                
-                -- 添加原始长度（小端序）
-                -- 由于 Roblox Lua 没有 string.pack，我们需要手动实现
-                local lenBytes = {}
-                for i = 1, 8 do
-                    lenBytes[i] = originalLengthBits % 256
-                    originalLengthBits = math.floor(originalLengthBits / 256)
-                end
-                message = message .. string.char(table.unpack(lenBytes))
-                
-                -- 处理消息分块
-                for i = 1, #message, 64 do
-                    local chunk = message:sub(i, i + 63)
-                    local M = {}
-                    
-                    -- 将分块分成16个32位字
-                    for j = 1, 16 do
-                        local word = chunk:sub((j-1)*4 + 1, j*4)
-                        -- 手动解析小端序32位整数
-                        local a, b, c, d = word:byte(1, 4)
-                        M[j] = a + b * 256 + c * 65536 + d * 16777216
-                    end
-                    
-                    -- 初始化哈希值
-                    local A = a0
-                    local B = b0
-                    local C = c0
-                    local D = d0
-                    
-                    -- 主循环
-                    for i = 0, 63 do
-                        local F, g
-                        
-                        if i <= 15 then
-                            F = bit_or(bit_and(B, C), bit_and(bit_not(B), D))
-                            g = i
-                        elseif i <= 31 then
-                            F = bit_or(bit_and(D, B), bit_and(bit_not(D), C))
-                            g = (5 * i + 1) % 16
-                        elseif i <= 47 then
-                            F = bit_xor(bit_xor(B, C), D)
-                            g = (3 * i + 5) % 16
-                        else
-                            F = bit_xor(C, bit_or(B, bit_not(D)))
-                            g = (7 * i) % 16
-                        end
-                        
-                        F = (F + A + K[i+1] + M[g+1]) % 0x100000000
-                        A = D
-                        D = C
-                        C = B
-                        B = (B + leftRotate(F, s[i+1])) % 0x100000000
-                    end
-                    
-                    -- 添加到结果中
-                    a0 = (a0 + A) % 0x100000000
-                    b0 = (b0 + B) % 0x100000000
-                    c0 = (c0 + C) % 0x100000000
-                    d0 = (d0 + D) % 0x100000000
-                end
-                
-                -- 生成最终哈希值（小端序）
-                local function toLittleEndian(n)
-                    return string.char(
-                        n % 256,
-                        math.floor(n / 256) % 256,
-                        math.floor(n / 65536) % 256,
-                        math.floor(n / 16777216) % 256
-                    )
-                end
-                
-                local digest = toLittleEndian(a0) .. toLittleEndian(b0) .. toLittleEndian(c0) .. toLittleEndian(d0)
-                
-                -- 转换为十六进制字符串
-                local result = ""
-                for i = 1, #digest do
-                    result = result .. string.format("%02X", digest:byte(i))
-                end
-                
-                return result
-            end
-
-
-
-        local function LoadScript()
-            ----------------------------------------脚本写这里----------------------------------------
-
-
-
-
--- UI 初始化
-getgenv()._CONFIGS = { UI_NAME = "镜花水月99夜-优化版" }
+getgenv()._CONFIGS = { UI_NAME = "镜花水月99夜" }
 loadstring(game:HttpGet("https://pastebin.com/raw/CxxfciVn"))()
 
 -- 服务
@@ -255,16 +18,6 @@ local ActiveESPBillboards = {}
 local DistanceForAutoChopTree = 25
 _G.isCollecting = false
 local collectQuantity = 10
-
--- 优化：收集设置
-local CollectSettings = {
-    MaxRetries = 3,              -- 最大重试次数
-    RetryDelay = 2,              -- 重试延迟(秒)
-    PickupDelay = 1,             -- 拾取后延迟(秒)
-    TeleportDelay = 0.5,         -- 传送后延迟(秒)
-    VerificationRange = 30,      -- 传送验证范围
-    SafetyDelay = 1.5           -- 安全延迟(秒)
-}
 
 local Features = {
     KillAura = false,
@@ -397,22 +150,63 @@ local function setFog(enabled)
     end
 end
 
+-- 增强版物品查找函数（支持BasePart类型物品如绷带）
 local function findItems(itemName)
     local found = {}
-    local folders = {"ltems", "Items", "MapItems", "WorldItems"}
+    local folders = {"ltems", "Items", "MapItems", "WorldItems", "Loot", "Drops"}
+    
+    -- 搜索指定文件夹
     for _, folderName in ipairs(folders) do
         local folder = Workspace:FindFirstChild(folderName)
         if folder then
             for _, item in ipairs(folder:GetDescendants()) do
-                if item.Name == itemName and item:IsA("Model") then
-                    local primaryPart = item.PrimaryPart or item:FindFirstChild("HumanoidRootPart") or item:FindFirstChild("Handle")
-                    if primaryPart then
-                        table.insert(found, {model = item, part = primaryPart})
+                if item.Name == itemName and item.Parent ~= Character then
+                    local targetPart = nil
+                    
+                    if item:IsA("Model") then
+                        -- Model类型物品
+                        targetPart = item.PrimaryPart or 
+                                   item:FindFirstChild("HumanoidRootPart") or 
+                                   item:FindFirstChild("Handle") or
+                                   item:FindFirstChild("Part") or
+                                   item:FindFirstChildWhichIsA("BasePart")
+                    elseif item:IsA("BasePart") then
+                        -- BasePart类型物品（如绷带）
+                        targetPart = item
+                    end
+                    
+                    if targetPart then
+                        table.insert(found, {model = item, part = targetPart})
                     end
                 end
             end
         end
     end
+    
+    -- 如果在文件夹中找不到，直接搜索Workspace
+    if #found == 0 then
+        for _, item in ipairs(Workspace:GetDescendants()) do
+            if item.Name == itemName and item.Parent ~= Character then
+                local targetPart = nil
+                
+                if item:IsA("Model") then
+                    targetPart = item.PrimaryPart or 
+                               item:FindFirstChild("HumanoidRootPart") or 
+                               item:FindFirstChild("Handle") or
+                               item:FindFirstChild("Part") or
+                               item:FindFirstChildWhichIsA("BasePart")
+                elseif item:IsA("BasePart") then
+                    targetPart = item
+                end
+                
+                if targetPart then
+                    table.insert(found, {model = item, part = targetPart})
+                    if #found >= 50 then break end -- 限制搜索结果避免卡顿
+                end
+            end
+        end
+    end
+    
     return found
 end
 
@@ -450,141 +244,183 @@ local function teleportToBonfire()
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
--- 优化：改进背包物品统计
-local function getInventoryItemCount(itemName)
-    local inventory = LP:WaitForChild("Inventory")
-    local count = 0
-    for _, item in ipairs(inventory:GetChildren()) do
-        if item.Name == itemName then
-            count = count + 1
-        end
-    end
-    return count
-end
-
--- 优化：改进收集功能
+-- 增强版收集功能
 function collectAndDropLoop(itemName, displayName, quantity)
     local MIN_SEARCH_DISTANCE = 15
+    local TELEPORT_VERIFICATION_RANGE = 25
+    local MAX_RETRIES = 3
+    local RETRY_DELAY = 2
+
+    -- 强制重置状态和重新获取对象
+    _G.isCollecting = true
+    Character = LP.Character or LP.CharacterAdded:Wait()
     
-    local rootPart = Character:WaitForChild("HumanoidRootPart")
-    local Humanoid = Character:WaitForChild("Humanoid")
-    local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
+    -- 等待角色完全加载
+    local rootPart = Character:WaitForChild("HumanoidRootPart", 10)
+    local Humanoid = Character:WaitForChild("Humanoid", 10)
+    
+    if not rootPart or not Humanoid then
+        library:Notify({Title = "致命错误", Text = "角色加载失败", Duration = 4})
+        _G.isCollecting = false
+        return
+    end
+
+    -- 验证和获取 RemoteEvents
+    local RemoteEvents
+    local success, err = pcall(function()
+        RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents", 10)
+    end)
+    
+    if not success or not RemoteEvents then
+        library:Notify({Title = "致命错误", Text = "无法连接到游戏服务：" .. tostring(err), Duration = 4})
+        _G.isCollecting = false
+        return
+    end
+
     local initialPosition = rootPart.Position
-    local inventory = LP:WaitForChild("Inventory")
+    local inventory = LP:WaitForChild("Inventory", 10)
     
+    if not inventory then
+        library:Notify({Title = "致命错误", Text = "无法访问背包", Duration = 4})
+        _G.isCollecting = false
+        return
+    end
+    
+    -- 查找背包并添加调试
     local activeSack = nil
+    print("=== 背包调试信息 ===")
     for _, item in ipairs(inventory:GetChildren()) do
+        print("背包物品:", item.Name)
         if string.match(item.Name, "Sack$") then
             activeSack = item
+            print("找到背包:", item.Name)
             break
         end
     end
 
     if not activeSack then
-        library:Notify({Title = "致命错误", Text = "找不到任何以 'Sack' 结尾的背包", Duration = 4})
+        library:Notify({Title = "致命错误", Text = "找不到任何以 'Sack' 结尾的背包。请检查背包中是否有背包物品。", Duration = 6})
         _G.isCollecting = false
         return
     end
     
-    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName .. "（优化版）", Duration = 3})
+    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName .. "，使用背包：" .. activeSack.Name, Duration = 4})
 
-    -- 优化：安全传送函数，增加错误检测
-    local function safeTeleport(targetPosition)
-        local beforePos = rootPart.Position
-        rootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 4, 0))
-        task.wait(CollectSettings.TeleportDelay)
-        
-        -- 检查传送是否成功
-        local afterPos = rootPart.Position
-        local distance = (afterPos - targetPosition).Magnitude
-        
-        if distance > CollectSettings.VerificationRange then
-            library:Notify({Title = "传送警告", Text = "传送距离异常：" .. math.floor(distance) .. "米", Duration = 3})
-            return false
-        end
-        
-        Humanoid.PlatformStand = true
-        task.wait(0.1)
-        Humanoid.PlatformStand = false
-        task.wait(CollectSettings.SafetyDelay)
-        return true
-    end
-
-    -- 优化：改进拾取检测，使用背包物品数量变化
-    local function pickupItemImproved(itemModelOrPart)
-        local beforeInventoryCount = getInventoryItemCount(itemName)
+    local function safeTeleport(targetPosition, attempt)
+        attempt = attempt or 1
         local success = false
         
-        local ok, result = pcall(function()
-            local requestBagStore = RemoteEvents:WaitForChild("RequestBagStoreItem")
-            return requestBagStore:InvokeServer(activeSack, itemModelOrPart)
-        end)
-        
-        if not ok then
-            library:Notify({Title = "拾取错误", Text = "RemoteEvent调用失败", Duration = 2})
-            return false
-        end
-        
-        task.wait(CollectSettings.PickupDelay)
-        
-        local afterInventoryCount = getInventoryItemCount(itemName)
-        success = (afterInventoryCount > beforeInventoryCount)
-        
-        if success then
-            library:Notify({Title = "拾取成功", Text = "背包物品数量：" .. afterInventoryCount, Duration = 1})
-        else
-            library:Notify({Title = "拾取失败", Text = "背包物品数量未变化", Duration = 2})
+        for i = 1, MAX_RETRIES do
+            pcall(function()
+                rootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 4, 0))
+                task.wait(0.2)
+                Humanoid.PlatformStand = true
+                task.wait(0.1)
+                Humanoid.PlatformStand = false
+                success = true
+            end)
+            
+            if success then break end
+            task.wait(0.5)
         end
         
         return success
     end
 
-    -- 优化：丢弃函数，增加成功验证
     local function dropItemAfterReturn(itemSample)
-        if not itemSample or not itemSample.Parent then 
-            library:Notify({Title = "丢弃错误", Text = "无效的丢弃目标", Duration = 2})
-            return false
-        end
-        
-        local beforeInventoryCount = getInventoryItemCount(itemName)
         local success = false
+        for i = 1, MAX_RETRIES do
+            local ok, err = pcall(function()
+                if not itemSample or not itemSample.Parent then return end
+                local requestBagDrop = RemoteEvents:FindFirstChild("RequestBagDropItem")
+                if requestBagDrop then
+                    requestBagDrop:FireServer(activeSack, itemSample, true)
+                    success = true
+                end
+            end)
+            
+            if success then break end
+            print("丢弃失败，重试:", err)
+            task.wait(RETRY_DELAY)
+        end
+        return success
+    end
+
+    local function pickupItem(itemModelOrPart)
+        local wasSuccessful = false
         
-        pcall(function()
-            local requestBagDrop = RemoteEvents:WaitForChild("RequestBagDropItem")
-            requestBagDrop:FireServer(activeSack, itemSample, true)
-            success = true
-        end)
-        
-        if success then
-            task.wait(0.5)
-            local afterInventoryCount = getInventoryItemCount(itemName)
-            if afterInventoryCount < beforeInventoryCount then
-                library:Notify({Title = "丢弃成功", Text = "背包物品数量：" .. afterInventoryCount, Duration = 1})
-                return true
+        for i = 1, MAX_RETRIES do
+            local success, err = pcall(function()
+                local requestBagStore = RemoteEvents:FindFirstChild("RequestBagStoreItem")
+                if requestBagStore then
+                    local result = requestBagStore:InvokeServer(activeSack, itemModelOrPart)
+                    wasSuccessful = true
+                    print("拾取成功，结果:", result)
+                else
+                    error("RequestBagStoreItem 不存在")
+                end
+            end)
+            
+            if success and wasSuccessful then
+                break
+            else
+                print("拾取失败，重试 " .. i .. "/3:", err)
+                task.wait(RETRY_DELAY)
             end
         end
         
-        library:Notify({Title = "丢弃失败", Text = "物品可能未成功丢弃", Duration = 2})
-        return false
+        return wasSuccessful
     end
 
+    -- 增强版目标查找函数（支持BasePart类型物品）
     local function findTargets()
         local allItems = {}
-        local foldersToSearch = {Workspace, Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems")}
+        local foldersToSearch = {
+            Workspace:FindFirstChild("Items"), 
+            Workspace:FindFirstChild("ltems"), 
+            Workspace:FindFirstChild("MapItems"),
+            Workspace:FindFirstChild("WorldItems"),
+            Workspace:FindFirstChild("Loot"),
+            Workspace:FindFirstChild("Drops"),
+            Workspace
+        }
+        
         for _, folder in pairs(foldersToSearch) do
             if folder then
                 for _, item in ipairs(folder:GetChildren()) do
-                    if item.Name == itemName and (item:IsA("Model") or item:IsA("BasePart")) then
-                        table.insert(allItems, item)
+                    if item.Name == itemName and item.Parent ~= Character then
+                        if item:IsA("Model") or item:IsA("BasePart") then
+                            table.insert(allItems, item)
+                        end
+                    end
+                end
+                -- 搜索子物品
+                for _, subItem in ipairs(folder:GetDescendants()) do
+                    if subItem.Name == itemName and subItem.Parent ~= Character then
+                        if subItem:IsA("Model") or subItem:IsA("BasePart") then
+                            table.insert(allItems, subItem)
+                        end
                     end
                 end
             end
         end
+        
         if #allItems == 0 then return nil, nil end
         
         local closestTarget, minDistance = nil, math.huge
         for _, item in ipairs(allItems) do
-            local primaryPart = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart") or item
+            local primaryPart = nil
+            
+            if item:IsA("Model") then
+                primaryPart = item.PrimaryPart or 
+                             item:FindFirstChild("HumanoidRootPart") or 
+                             item:FindFirstChild("Handle") or
+                             item:FindFirstChild("Part") or
+                             item:FindFirstChildWhichIsA("BasePart")
+            elseif item:IsA("BasePart") then
+                primaryPart = item
+            end
+            
             if primaryPart then
                 local distance = (primaryPart.Position - initialPosition).Magnitude
                 if distance < minDistance and distance > MIN_SEARCH_DISTANCE then
@@ -596,89 +432,109 @@ function collectAndDropLoop(itemName, displayName, quantity)
         
         local dropSample = nil
         for _, item in ipairs(allItems) do
-            if item ~= closestTarget then dropSample = item; break end
+            if item ~= closestTarget then 
+                dropSample = item
+                break 
+            end
         end
-        if not dropSample and closestTarget then dropSample = closestTarget
-        elseif #allItems > 0 and not dropSample then dropSample = allItems[1] end
+        if not dropSample and closestTarget then 
+            dropSample = closestTarget
+        elseif #allItems > 0 and not dropSample then 
+            dropSample = allItems[1] 
+        end
         
         return closestTarget, dropSample
     end
 
-    -- 优化：添加重试机制的拾取函数
-    local function pickupWithRetry(pickupTarget)
-        for attempt = 1, CollectSettings.MaxRetries do
-            if not _G.isCollecting then break end
-            
-            library:Notify({Title = "尝试拾取", Text = "第 " .. attempt .. " 次尝试", Duration = 1})
-            
-            local success = pickupItemImproved(pickupTarget)
-            if success then
-                return true
-            end
-            
-            if attempt < CollectSettings.MaxRetries then
-                library:Notify({Title = "重试中", Text = "等待 " .. CollectSettings.RetryDelay .. " 秒后重试", Duration = 2})
-                task.wait(CollectSettings.RetryDelay)
-            end
-        end
-        
-        library:Notify({Title = "拾取失败", Text = "已达到最大重试次数", Duration = 3})
-        return false
-    end
-
-    -- 主收集循环
+    -- 主循环
     for i = 1, quantity do
         if not _G.isCollecting then
-            library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。已完成 " .. (i-1) .. "/" .. quantity, Duration = 3})
+            library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。", Duration = 3})
             break
         end
 
-        library:Notify({Title = "收集进度", Text = "正在收集第 " .. i .. "/" .. quantity .. " 个" .. displayName, Duration = 2})
+        -- 重新验证关键对象
+        if not Character or not Character.Parent then
+            Character = LP.Character
+            if not Character then
+                library:Notify({Title = "错误", Text = "角色丢失，任务中断", Duration = 4})
+                break
+            end
+            rootPart = Character:FindFirstChild("HumanoidRootPart")
+            Humanoid = Character:FindFirstChild("Humanoid")
+        end
 
         local pickupTarget, dropSample = findTargets()
 
         if pickupTarget then
-            local targetPart = pickupTarget.PrimaryPart or pickupTarget:FindFirstChildWhichIsA("BasePart") or pickupTarget
+            local targetPart = nil
             
-            -- 传送到目标
-            local teleportSuccess = safeTeleport(targetPart.Position)
-            if not teleportSuccess then
-                library:Notify({Title = "传送失败", Text = "第 " .. i .. " 个目标传送失败，跳过", Duration = 3})
-                task.wait(2)
+            if pickupTarget:IsA("Model") then
+                targetPart = pickupTarget.PrimaryPart or 
+                           pickupTarget:FindFirstChild("HumanoidRootPart") or 
+                           pickupTarget:FindFirstChild("Handle") or
+                           pickupTarget:FindFirstChild("Part") or
+                           pickupTarget:FindFirstChildWhichIsA("BasePart")
+            elseif pickupTarget:IsA("BasePart") then
+                targetPart = pickupTarget
+            end
+            
+            if not targetPart then
+                library:Notify({Title = "警告", Text = "无法找到物品的有效部件，跳过", Duration = 3})
+                task.wait(1)
                 continue
             end
             
-            -- 尝试拾取（带重试）
-            local pickupSuccess = pickupWithRetry(pickupTarget)
+            print("正在传送到目标:", pickupTarget.Name, "位置:", targetPart.Position, "类型:", pickupTarget.ClassName)
+            
+            local teleportSuccess = safeTeleport(targetPart.Position)
+            if not teleportSuccess then
+                library:Notify({Title = "错误", Text = "传送失败，跳过当前目标", Duration = 3})
+                task.wait(1)
+                continue
+            end
+            
+            task.wait(0.1)
+
+            local distanceAfterTeleport = (rootPart.Position - targetPart.Position).Magnitude
+            if distanceAfterTeleport > TELEPORT_VERIFICATION_RANGE then
+                library:Notify({Title = "警告", Text = "传送被服务器拉回，尝试直接拾取", Duration = 3})
+            end
+            
+            local pickupSuccess = pickupItem(pickupTarget)
             
             if pickupSuccess then
-                -- 返回初始位置
+                print("成功拾取，正在返回篝火")
+                
                 local returnSuccess = safeTeleport(initialPosition)
                 if not returnSuccess then
-                    library:Notify({Title = "返回失败", Text = "返回篝火失败，传送回篝火", Duration = 3})
-                    teleportToBonfire()
-                    task.wait(2)
+                    library:Notify({Title = "警告", Text = "返回失败，尝试传送到篝火", Duration = 3})
+                    safeTeleport(BONFIRE_POSITION)
                 end
+                
+                task.wait(0.1)
 
-                -- 丢弃物品
                 if dropSample then
                     dropItemAfterReturn(dropSample)
                 end
                 
-                library:Notify({Title = "收集成功", Text = "已完成 " .. i .. "/" .. quantity, Duration = 2})
+                library:Notify({Title = "进度", Text = string.format("已收集 %d/%d %s", i, quantity, displayName), Duration = 2})
+                task.wait(0.2)
             else
-                library:Notify({Title = "收集失败", Text = "第 " .. i .. " 个物品拾取失败，继续下一个", Duration = 3})
+                library:Notify({Title = "警告", Text = "拾取失败，跳过当前目标", Duration = 3})
+                task.wait(1)
             end
-            
-            task.wait(CollectSettings.SafetyDelay)
         else
-            library:Notify({Title = "搜索失败", Text = "找不到更多" .. displayName .. "，任务提前结束。已完成 " .. (i-1) .. "/" .. quantity, Duration = 4})
+            library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
+        
+        -- 防止过快执行
+        task.wait(0.5)
     end
     
     if _G.isCollecting then
-        library:Notify({Title = "任务完成", Text = "所有收集任务已完成！共完成 " .. quantity .. " 个" .. displayName, Duration = 5})
+        library:Notify({Title = "任务完成", Text = "所有收集任务已完成！", Duration = 5})
     end
     _G.isCollecting = false
 end
@@ -741,8 +597,13 @@ local function toggleESP(itemName, displayName, color)
     for _, item in ipairs(items) do createESP(item.part) end
 
     getgenv()[espKey].conn = Workspace.DescendantAdded:Connect(function(descendant)
-        if descendant.Name == itemName and descendant:IsA("Model") then
-            local primaryPart = descendant.PrimaryPart or descendant:FindFirstChild("HumanoidRootPart") or descendant:FindFirstChild("Handle")
+        if descendant.Name == itemName then
+            local primaryPart = nil
+            if descendant:IsA("Model") then
+                primaryPart = descendant.PrimaryPart or descendant:FindFirstChild("HumanoidRootPart") or descendant:FindFirstChild("Handle")
+            elseif descendant:IsA("BasePart") then
+                primaryPart = descendant
+            end
             if primaryPart then createESP(primaryPart) end
         end
     end)
@@ -1089,14 +950,6 @@ local function generatePreview()
 end
 
 -- 单点种树（成功校验）
-local function getSaplingFolder()
-    local candidates = {"Items", "ltems", "WorldItems", "MapItems"}
-    for _, name in ipairs(candidates) do
-        local f = Workspace:FindFirstChild(name)
-        if f then return f end
-    end
-    return nil
-end
 local function plantSingleTreeAt(position)
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local folder = getSaplingFolder()
@@ -1436,7 +1289,33 @@ for _, item in ipairs(teleportItemConfig) do
     end)
 end
 
-local CollectTab = library:CreateTab("收集功能-优化版")
+local CollectTab = library:CreateTab("收集功能")
+CollectTab:NewButton("🔴 强制重置收集状态", function()
+    _G.isCollecting = false
+    library:Notify({Title = "状态重置", Text = "收集状态已强制重置为 false", Duration = 3})
+end)
+CollectTab:NewButton("🔍 调试物品搜索", function()
+    local itemName = "Bandage"  -- 可以改为你想调试的物品名
+    print("=== 搜索", itemName, "===")
+    
+    for _, descendant in ipairs(Workspace:GetDescendants()) do
+        if descendant.Name == itemName then
+            print("找到:", descendant.Name, "类型:", descendant.ClassName, "父级:", descendant.Parent.Name)
+            if descendant:IsA("Model") then
+                print("  - PrimaryPart:", descendant.PrimaryPart)
+                print("  - 子部件:")
+                for _, child in ipairs(descendant:GetChildren()) do
+                    if child:IsA("BasePart") then
+                        print("    -", child.Name, child.ClassName)
+                    end
+                end
+            end
+        end
+    end
+    
+    local found = findItems(itemName)
+    library:Notify({Title = "调试", Text = "找到 " .. #found .. " 个 " .. itemName, Duration = 3})
+end)
 CollectTab:NewButton("停止当前收集任务", function()
     if _G.isCollecting then
         _G.isCollecting = false
@@ -1454,32 +1333,11 @@ CollectTab:NewBox("自定义收集数量", "10", function(text)
         library:Notify({Title = "输入错误", Text = "请输入一个有效的正整数。", Duration = 3})
     end
 end)
-
--- 优化：添加收集设置
-CollectTab:NewSeparator()
-CollectTab:NewButton("=== 收集优化设置 ===", function() end)
-CollectTab:NewSlider("最大重试次数", "Max_Retries", CollectSettings.MaxRetries, 1, 10, false, function(value)
-    CollectSettings.MaxRetries = value
-    library:Notify({Title = "设置", Text = "最大重试次数: " .. value, Duration = 2})
-end)
-CollectTab:NewSlider("重试延迟(秒)", "Retry_Delay", CollectSettings.RetryDelay, 1, 10, true, function(value)
-    CollectSettings.RetryDelay = value
-    library:Notify({Title = "设置", Text = "重试延迟: " .. value .. "秒", Duration = 2})
-end)
-CollectTab:NewSlider("拾取延迟(秒)", "Pickup_Delay", CollectSettings.PickupDelay, 0.5, 5, true, function(value)
-    CollectSettings.PickupDelay = value
-    library:Notify({Title = "设置", Text = "拾取延迟: " .. value .. "秒", Duration = 2})
-end)
-CollectTab:NewSlider("安全延迟(秒)", "Safety_Delay", CollectSettings.SafetyDelay, 0.5, 5, true, function(value)
-    CollectSettings.SafetyDelay = value
-    library:Notify({Title = "设置", Text = "安全延迟: " .. value .. "秒", Duration = 2})
-end)
-
 CollectTab:NewSeparator()
 for _, item in ipairs(collectItemConfig) do
-    CollectTab:NewButton("循环收集: "..item.display.." (优化版)", function()
+    CollectTab:NewButton("循环收集: "..item.display, function()
         if _G.isCollecting then
-            library:Notify({Title = "错误", Text = "已有收集任务在运行！请先停止。", Duration = 3})
+            library:Notify({Title = "错误", Text = "已有收集任务在运行！请先停止或重置状态。", Duration = 4})
             return
         end
         _G.isCollecting = true
@@ -1602,9 +1460,9 @@ end)
 SettingsTab:NewButton("清除所有透视", ClearAllESP)
 
 library:Notify({
-    Title = "欢迎使用镜花水月-优化版",
-    Text = "已优化收集功能稳定性，支持重试机制和详细状态监控！",
-    Duration = 5
+    Title = "欢迎使用镜花水月（完整增强版）",
+    Text = "所有功能已优化！现在支持收集绷带等BasePart类型物品！",
+    Duration = 6
 })
 if setclipboard then
     setclipboard("1056584995")
@@ -1613,191 +1471,4 @@ if setclipboard then
         Text = "已自动复制交流群号: 1056584995",
         Duration = 5
     })
-end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            ----------------------------------------脚本写这里----------------------------------------
-
-        end
-        
-        local function Check_Functions_Is_Hooked(Function)
-            if isfunctionhooked(Function) then
-                kick("[Function][Hooker]")
-            end   
-        end
-
-    -- Gui 检测
-        print("2")
-        game.DescendantAdded:Connect(function(Objects)
-            for _,v in {"github", "pastebin", "pythonanywhere"} do
-                if string.find(string.lower(tostring(Objects.Name)), v) or string.find(tostring(Objects.Name), v) then
-                    Objects.Name = "[南天门]"
-                    Objects:Destroy()
-                    kick("请重新尝试[Hook][21]")
-                end
-
-                if Objects:IsA("TextLabel") or Objects:IsA("TextButton") or Objects:IsA("TextBox") or Objects:IsA("Message") then
-                    if string.find(string.lower(tostring(Objects.Text)), tostring(v)) or string.find(tostring(Objects.Text), tostring(v)) or string.find(tostring(Objects.Text), string.lower(tostring(v))) then
-                        Objects.Text = "[南天门]"
-                        Objects:Destroy()
-                        kick("请重新尝试[Hook][22]")
-                    end
-                end
-            end
-        end)
-
-
-    -- 网络验证 & 时间验证
-        print("3")
-        local Key = request({
-            Url = "https://users.roblox.com/v1/users/"..game:GetService("Players").LocalPlayer.UserId,
-            Method = "GET"
-        }).Body
-        local json = game:GetService("HttpService"):JSONDecode(Key)
-        local time = json.created:split("T")[1]
-        local local_time = os.date("!*t", os.time() - (game:GetService("Players").LocalPlayer.AccountAge*86400))
-
-        local year = local_time.year
-        local month = local_time.month
-        local day = local_time.day
-        if string.len(tostring(month)) == 1 then
-            month = string.format("0%s", month)
-        end
-
-        if string.len(tostring(day)) == 1 then
-            day = string.format("0%s", day)
-        end
-
-        if not (time == string.format("%s-%s-%s", year, month, day)) then
-            if not ((tonumber(local_time.day) - tonumber(day)) < 1 and (tonumber(day) - tonumber(local_time.day)) > -1) then
-                kick("请重新尝试[1][1]")
-            end
-        end
-
-        if json.displayName ~= game:GetService("Players").LocalPlayer.DisplayName then
-            kick("请重新尝试[1][2]")
-        end
-
-
-        for _, v in getgc() do
-            if typeof(v) == "function" then
-                Check_Functions_Is_Hooked(v)
-            end
-        end
-        for _, v in getfenv() do
-            if typeof(v) == "function" then
-                Check_Functions_Is_Hooked(v)
-            end
-        end
-        for _, v in getgenv() do
-            if typeof(v) == "function" then
-                Check_Functions_Is_Hooked(v)
-            end
-        end
-
-        local File_Function = {
-            readfile,
-            writefile,
-            appendfile,
-            loadfile,
-            listfiles,
-            isfile,
-            isfolder,
-            makefolder,
-            delfolder,
-            delfile,
-        }
-        for _,v in pairs(File_Function) do
-            if isfunctionhooked(v) then
-                kick("[Function][Hooker]")
-            end
-            local Original_Function = clonefunction(v)
-            hookfunction(v, print)
-            if not isfunctionhooked(v) then
-                kick("[Function][Hooker]")
-            end
-            hookfunction(v, Original_Function)
-        end
-    -- 黑名单
-        print("4")
-        Time = os.time()
-        local Key =  request({Url = "https://nantianmen.pythonanywhere.com/90E231834249308F9155428C7C0E06A9",Method = "POST",Headers = {["Content-Type"] = "application/json"},
-        Body = game:GetService("HttpService"):JSONEncode({
-            [randomString(math.random(50))] = Base64_enc(randomString(math.random(50))),
-            ["username"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*30) .. "|" .. game:GetService("Players").LocalPlayer.Character.Name),
-            ["Time"] = Base64_enc(tostring(Time*250)),
-            ["Check"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*666) .. "|" .. MD5(Base64_enc(tostring(Time*30) .. "|" .. game:GetService("Players").LocalPlayer.Character.Name)..Base64_enc(tostring(Time*250)) )),
-        })})
-        local Content = Base64_dec(Key.Body)
-        local Key = string.split(Content, "|")
-        if (Key[1])-Time>30 or (Key[1])-Time<-30 then
-            kick("[Black]时间验证失败")
-        end
-        if MD5('By NanTianMen_Content:' .. game:GetService("Players").LocalPlayer.Character.Name .. ' True') == Key[2] then 
-            kick("[南天门]你已被加入黑名单")
-        end
-
-    -- 加载脚本 & 基础验证
-        print("5")
-
-
-        if game:GetService("Players").LocalPlayer.Name == game:GetService("Players").LocalPlayer.Character.Name and game:GetService("Players").LocalPlayer.CharacterAppearanceId == game:GetService("Players").LocalPlayer.UserId and game:GetService("Players"):GetUserIdFromNameAsync(game:GetService("Players").LocalPlayer.Name) == game:GetService("Players").LocalPlayer.UserId then
-            Time = os.time()
-            local Key =  request({Url = "https://nantianmen.pythonanywhere.com/6F1C5EB044796E5224D24B2373F5544B",Method = "POST",Headers = {["Content-Type"] = "application/json"},
-            Body = game:GetService("HttpService"):JSONEncode({
-                [randomString(math.random(50))] = Base64_enc(randomString(math.random(50))),
-                ["script_id"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*20) .. "|" .. _Script_id),
-                ["username"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*30) .. "|" .. game:GetService("Players").LocalPlayer.Character.Name),
-                ["Time"] = Base64_enc(tostring(Time*250)),
-                ["Check"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*666) .. "|" .. MD5(Base64_enc(tostring(Time*20) .. "|" .. _Script_id)..Base64_enc(game:GetService("Players").LocalPlayer.Character.Name) .. Base64_enc(tostring(Time*250))    )  ),
-            })})
-            local Content = Base64_dec(Key.Body)
-            local Key = string.split(Content, "|")
-            if (Key[1])-Time>30 or (Key[1])-Time<-30 then
-                print("时间验证失败")
-            end
-            if MD5('By NanTianMen_Content:' .. game:GetService("Players").LocalPlayer.Character.Name .. ' True') == Key[2] then -- 1
-                LoadScript()
-            else
-                Time = os.time()
-                local Key =  request({Url = "https://nantianmen.pythonanywhere.com/6F1C5EB044796E5224D24B2373F5544B",Method = "POST",Headers = {["Content-Type"] = "application/json"},
-                Body = game:GetService("HttpService"):JSONEncode({
-                    [randomString(math.random(50))] = Base64_enc(randomString(math.random(50))),
-                    ["script_id"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*20) .. "|" .. _Script_id),
-                    ["username"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*30) .. "|" .. game:GetService("Players").LocalPlayer.Character.Name),
-                    ["Time"] = Base64_enc(tostring(Time*250)),
-                    ["Check"] = Base64_enc(randomString(math.random(50)) .. tostring(Time*666) .. "|" .. MD5(Base64_enc(tostring(Time*20) .. "|" .. _Script_id)..Base64_enc(game:GetService("Players").LocalPlayer.Character.Name) .. Base64_enc(tostring(Time*250))    )  ),
-                })})
-                local Content = Base64_dec(Key.Body)
-                local Key = string.split(Content, "|")
-                if (Key[1])-Time>30 or (Key[1])-Time<-30 then
-                    print("时间验证失败")
-                end
-                if MD5('By NanTianMen_Content:' .. game:GetService("Players").LocalPlayer.Character.Name .. ' True') == Key[2] then -- 2
-                    LoadScript()
-                else
-                    game:GetService("Players").LocalPlayer:Kick(_Kick)
-                    wait(3)
-                    game:shutdown()
-                    wait(1)
-                    while true do end
-                end
-            end
-        else
-            kick("请重新尝试[3][3]")
-        end
-else
-    Message("请勿重新加载", 3)
 end
