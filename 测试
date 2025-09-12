@@ -1,4 +1,5 @@
-getgenv()._CONFIGS = { UI_NAME = "镜花水月99夜" }
+-- UI 初始化
+getgenv()._CONFIGS = { UI_NAME = "镜花水月99夜-优化版" }
 loadstring(game:HttpGet("https://pastebin.com/raw/CxxfciVn"))()
 
 -- 服务
@@ -18,6 +19,16 @@ local ActiveESPBillboards = {}
 local DistanceForAutoChopTree = 25
 _G.isCollecting = false
 local collectQuantity = 10
+
+-- 优化：收集设置
+local CollectSettings = {
+    MaxRetries = 3,              -- 最大重试次数
+    RetryDelay = 2,              -- 重试延迟(秒)
+    PickupDelay = 1,             -- 拾取后延迟(秒)
+    TeleportDelay = 0.5,         -- 传送后延迟(秒)
+    VerificationRange = 30,      -- 传送验证范围
+    SafetyDelay = 1.5           -- 安全延迟(秒)
+}
 
 local Features = {
     KillAura = false,
@@ -150,63 +161,22 @@ local function setFog(enabled)
     end
 end
 
--- 增强版物品查找函数（支持BasePart类型物品如绷带）
 local function findItems(itemName)
     local found = {}
-    local folders = {"ltems", "Items", "MapItems", "WorldItems", "Loot", "Drops"}
-    
-    -- 搜索指定文件夹
+    local folders = {"ltems", "Items", "MapItems", "WorldItems"}
     for _, folderName in ipairs(folders) do
         local folder = Workspace:FindFirstChild(folderName)
         if folder then
             for _, item in ipairs(folder:GetDescendants()) do
-                if item.Name == itemName and item.Parent ~= Character then
-                    local targetPart = nil
-                    
-                    if item:IsA("Model") then
-                        -- Model类型物品
-                        targetPart = item.PrimaryPart or 
-                                   item:FindFirstChild("HumanoidRootPart") or 
-                                   item:FindFirstChild("Handle") or
-                                   item:FindFirstChild("Part") or
-                                   item:FindFirstChildWhichIsA("BasePart")
-                    elseif item:IsA("BasePart") then
-                        -- BasePart类型物品（如绷带）
-                        targetPart = item
-                    end
-                    
-                    if targetPart then
-                        table.insert(found, {model = item, part = targetPart})
+                if item.Name == itemName and item:IsA("Model") then
+                    local primaryPart = item.PrimaryPart or item:FindFirstChild("HumanoidRootPart") or item:FindFirstChild("Handle")
+                    if primaryPart then
+                        table.insert(found, {model = item, part = primaryPart})
                     end
                 end
             end
         end
     end
-    
-    -- 如果在文件夹中找不到，直接搜索Workspace
-    if #found == 0 then
-        for _, item in ipairs(Workspace:GetDescendants()) do
-            if item.Name == itemName and item.Parent ~= Character then
-                local targetPart = nil
-                
-                if item:IsA("Model") then
-                    targetPart = item.PrimaryPart or 
-                               item:FindFirstChild("HumanoidRootPart") or 
-                               item:FindFirstChild("Handle") or
-                               item:FindFirstChild("Part") or
-                               item:FindFirstChildWhichIsA("BasePart")
-                elseif item:IsA("BasePart") then
-                    targetPart = item
-                end
-                
-                if targetPart then
-                    table.insert(found, {model = item, part = targetPart})
-                    if #found >= 50 then break end -- 限制搜索结果避免卡顿
-                end
-            end
-        end
-    end
-    
     return found
 end
 
@@ -244,300 +214,141 @@ local function teleportToBonfire()
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
--- 增强版收集功能
-function collectAndDropLoop(itemName, displayName, quantity)
-    local MIN_SEARCH_DISTANCE = 15
-    local TELEPORT_VERIFICATION_RANGE = 25
-    local MAX_RETRIES = 3
-    local RETRY_DELAY = 2
+-- ==========================[新收集+丢弃逻辑 - 开始]==========================
 
-    -- 强制重置状态和重新获取对象
-    _G.isCollecting = true
-    Character = LP.Character or LP.CharacterAdded:Wait()
-    
-    -- 等待角色完全加载
-    local rootPart = Character:WaitForChild("HumanoidRootPart", 10)
-    local Humanoid = Character:WaitForChild("Humanoid", 10)
-    
-    if not rootPart or not Humanoid then
-        library:Notify({Title = "致命错误", Text = "角色加载失败", Duration = 4})
-        _G.isCollecting = false
-        return
-    end
-
-    -- 验证和获取 RemoteEvents
-    local RemoteEvents
-    local success, err = pcall(function()
-        RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents", 10)
-    end)
-    
-    if not success or not RemoteEvents then
-        library:Notify({Title = "致命错误", Text = "无法连接到游戏服务：" .. tostring(err), Duration = 4})
-        _G.isCollecting = false
-        return
-    end
-
-    local initialPosition = rootPart.Position
-    local inventory = LP:WaitForChild("Inventory", 10)
-    
-    if not inventory then
-        library:Notify({Title = "致命错误", Text = "无法访问背包", Duration = 4})
-        _G.isCollecting = false
-        return
-    end
-    
-    -- 查找背包并添加调试
-    local activeSack = nil
-    print("=== 背包调试信息 ===")
+-- 辅助函数：统计背包内物品数量
+local function getInventoryItemCount(itemName)
+    local inventory = LP:WaitForChild("Inventory")
+    local count = 0
     for _, item in ipairs(inventory:GetChildren()) do
-        print("背包物品:", item.Name)
-        if string.match(item.Name, "Sack$") then
-            activeSack = item
-            print("找到背包:", item.Name)
-            break
+        if item.Name == itemName then
+            count = count + 1
         end
     end
+    return count
+end
 
-    if not activeSack then
-        library:Notify({Title = "致命错误", Text = "找不到任何以 'Sack' 结尾的背包。请检查背包中是否有背包物品。", Duration = 6})
-        _G.isCollecting = false
-        return
-    end
-    
-    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName .. "，使用背包：" .. activeSack.Name, Duration = 4})
+-- 这是替换后的新函数，用于快速拾取并丢弃附近的物品
+function collectAndDropNearbyLoop(itemName, displayName, quantity)
+    _G.isCollecting = true
+    library:Notify({Title = "任务开始", Text = "将原地刷 " .. quantity .. " 个" .. displayName, Duration = 3})
 
-    local function safeTeleport(targetPosition, attempt)
-        attempt = attempt or 1
-        local success = false
-        
-        for i = 1, MAX_RETRIES do
-            pcall(function()
-                rootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 4, 0))
-                task.wait(0.2)
-                Humanoid.PlatformStand = true
-                task.wait(0.1)
-                Humanoid.PlatformStand = false
-                success = true
-            end)
-            
-            if success then break end
-            task.wait(0.5)
-        end
-        
-        return success
-    end
+    local player = game:GetService("Players").LocalPlayer
+    local remoteEvents = game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents")
+    -- 设置为无限大范围，它会寻找全图最近的那个
+    local PICKUP_RANGE = math.huge 
 
-    local function dropItemAfterReturn(itemSample)
-        local success = false
-        for i = 1, MAX_RETRIES do
-            local ok, err = pcall(function()
-                if not itemSample or not itemSample.Parent then return end
-                local requestBagDrop = RemoteEvents:FindFirstChild("RequestBagDropItem")
-                if requestBagDrop then
-                    requestBagDrop:FireServer(activeSack, itemSample, true)
-                    success = true
-                end
-            end)
-            
-            if success then break end
-            print("丢弃失败，重试:", err)
-            task.wait(RETRY_DELAY)
-        end
-        return success
-    end
-
-    local function pickupItem(itemModelOrPart)
-        local wasSuccessful = false
-        
-        for i = 1, MAX_RETRIES do
-            local success, err = pcall(function()
-                local requestBagStore = RemoteEvents:FindFirstChild("RequestBagStoreItem")
-                if requestBagStore then
-                    local result = requestBagStore:InvokeServer(activeSack, itemModelOrPart)
-                    wasSuccessful = true
-                    print("拾取成功，结果:", result)
-                else
-                    error("RequestBagStoreItem 不存在")
-                end
-            end)
-            
-            if success and wasSuccessful then
-                break
-            else
-                print("拾取失败，重试 " .. i .. "/3:", err)
-                task.wait(RETRY_DELAY)
+    -- 寻找一个可用的背包
+    local function findActiveSack()
+        local inventory = player:WaitForChild("Inventory")
+        for _, item in ipairs(inventory:GetChildren()) do
+            if string.match(item.Name, "Sack$") or item.Name:find("Sack") then
+                return item
             end
         end
-        
-        return wasSuccessful
+        return nil
     end
 
-    -- 增强版目标查找函数（支持BasePart类型物品）
-    local function findTargets()
-        local allItems = {}
-        local foldersToSearch = {
-            Workspace:FindFirstChild("Items"), 
-            Workspace:FindFirstChild("ltems"), 
-            Workspace:FindFirstChild("MapItems"),
-            Workspace:FindFirstChild("WorldItems"),
-            Workspace:FindFirstChild("Loot"),
-            Workspace:FindFirstChild("Drops"),
-            Workspace
-        }
+    -- 在指定范围内寻找最近的、可拾取的物品
+    local function findClosestItem()
+        local closestItem, minDist = nil, PICKUP_RANGE
+        local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then return nil end
         
-        for _, folder in pairs(foldersToSearch) do
+        local folders = {"ltems", "Items", "MapItems", "WorldItems"}
+        for _, folderName in ipairs(folders) do
+            local folder = workspace:FindFirstChild(folderName)
             if folder then
                 for _, item in ipairs(folder:GetChildren()) do
-                    if item.Name == itemName and item.Parent ~= Character then
-                        if item:IsA("Model") or item:IsA("BasePart") then
-                            table.insert(allItems, item)
+                    if item.Name == itemName then
+                        local itemPart = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")) or item
+                        if itemPart then
+                            local dist = (itemPart.Position - rootPart.Position).Magnitude
+                            if dist < minDist then
+                                minDist = dist
+                                closestItem = item
+                            end
                         end
                     end
                 end
-                -- 搜索子物品
-                for _, subItem in ipairs(folder:GetDescendants()) do
-                    if subItem.Name == itemName and subItem.Parent ~= Character then
-                        if subItem:IsA("Model") or subItem:IsA("BasePart") then
-                            table.insert(allItems, subItem)
-                        end
-                    end
-                end
             end
         end
-        
-        if #allItems == 0 then return nil, nil end
-        
-        local closestTarget, minDistance = nil, math.huge
-        for _, item in ipairs(allItems) do
-            local primaryPart = nil
-            
-            if item:IsA("Model") then
-                primaryPart = item.PrimaryPart or 
-                             item:FindFirstChild("HumanoidRootPart") or 
-                             item:FindFirstChild("Handle") or
-                             item:FindFirstChild("Part") or
-                             item:FindFirstChildWhichIsA("BasePart")
-            elseif item:IsA("BasePart") then
-                primaryPart = item
-            end
-            
-            if primaryPart then
-                local distance = (primaryPart.Position - initialPosition).Magnitude
-                if distance < minDistance and distance > MIN_SEARCH_DISTANCE then
-                    minDistance = distance
-                    closestTarget = item
-                end
-            end
-        end
-        
-        local dropSample = nil
-        for _, item in ipairs(allItems) do
-            if item ~= closestTarget then 
-                dropSample = item
-                break 
-            end
-        end
-        if not dropSample and closestTarget then 
-            dropSample = closestTarget
-        elseif #allItems > 0 and not dropSample then 
-            dropSample = allItems[1] 
-        end
-        
-        return closestTarget, dropSample
+        return closestItem
     end
 
     -- 主循环
     for i = 1, quantity do
         if not _G.isCollecting then
-            library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。", Duration = 3})
+            library:Notify({Title = "任务中断", Text = "收集任务已手动停止。已完成 " .. (i-1) .. "/" .. quantity, Duration = 3})
             break
         end
 
-        -- 重新验证关键对象
-        if not Character or not Character.Parent then
-            Character = LP.Character
-            if not Character then
-                library:Notify({Title = "错误", Text = "角色丢失，任务中断", Duration = 4})
-                break
-            end
-            rootPart = Character:FindFirstChild("HumanoidRootPart")
-            Humanoid = Character:FindFirstChild("Humanoid")
+        local sack = findActiveSack()
+        if not sack then
+            library:Notify({Title = "错误", Text = "找不到任何背包！", Duration = 4})
+            break
         end
 
-        local pickupTarget, dropSample = findTargets()
+        local targetItem = findClosestItem()
 
-        if pickupTarget then
-            local targetPart = nil
+        if targetItem then
+            library:Notify({Title = "进度", Text = "正在处理第 " .. i .. "/" .. quantity .. " 个" .. displayName, Duration = 2})
             
-            if pickupTarget:IsA("Model") then
-                targetPart = pickupTarget.PrimaryPart or 
-                           pickupTarget:FindFirstChild("HumanoidRootPart") or 
-                           pickupTarget:FindFirstChild("Handle") or
-                           pickupTarget:FindFirstChild("Part") or
-                           pickupTarget:FindFirstChildWhichIsA("BasePart")
-            elseif pickupTarget:IsA("BasePart") then
-                targetPart = pickupTarget
-            end
-            
-            if not targetPart then
-                library:Notify({Title = "警告", Text = "无法找到物品的有效部件，跳过", Duration = 3})
-                task.wait(1)
-                continue
-            end
-            
-            print("正在传送到目标:", pickupTarget.Name, "位置:", targetPart.Position, "类型:", pickupTarget.ClassName)
-            
-            local teleportSuccess = safeTeleport(targetPart.Position)
-            if not teleportSuccess then
-                library:Notify({Title = "错误", Text = "传送失败，跳过当前目标", Duration = 3})
-                task.wait(1)
-                continue
-            end
-            
-            task.wait(0.1)
+            local beforeCount = getInventoryItemCount(itemName)
 
-            local distanceAfterTeleport = (rootPart.Position - targetPart.Position).Magnitude
-            if distanceAfterTeleport > TELEPORT_VERIFICATION_RANGE then
-                library:Notify({Title = "警告", Text = "传送被服务器拉回，尝试直接拾取", Duration = 3})
-            end
-            
-            local pickupSuccess = pickupItem(pickupTarget)
-            
-            if pickupSuccess then
-                print("成功拾取，正在返回篝火")
-                
-                local returnSuccess = safeTeleport(initialPosition)
-                if not returnSuccess then
-                    library:Notify({Title = "警告", Text = "返回失败，尝试传送到篝火", Duration = 3})
-                    safeTeleport(BONFIRE_POSITION)
-                end
-                
+            -- [你的拾取逻辑]
+            local success, err = pcall(function()
+                remoteEvents.EquipItemHandle:FireServer("FireAllClients", sack)
                 task.wait(0.1)
+                remoteEvents.RequestStartDraggingItem:FireServer(targetItem)
+                task.wait(0.1)
+                remoteEvents.RequestBagStoreItem:InvokeServer(sack, targetItem)
+                task.wait(0.1)
+                remoteEvents.StopDraggingItem:FireServer(targetItem)
+                remoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = player.Character.Head, Volume = 0.25})
+            end)
 
-                if dropSample then
-                    dropItemAfterReturn(dropSample)
-                end
-                
-                library:Notify({Title = "进度", Text = string.format("已收集 %d/%d %s", i, quantity, displayName), Duration = 2})
-                task.wait(0.2)
-            else
-                library:Notify({Title = "警告", Text = "拾取失败，跳过当前目标", Duration = 3})
+            if not success then
+                library:Notify({Title = "拾取错误", Text = "拾取时发生错误，跳过此物品。", Duration = 3})
                 task.wait(1)
+                continue -- 跳过本次循环
             end
+            
+            task.wait(0.3) -- 等待背包状态更新
+
+            local afterCount = getInventoryItemCount(itemName)
+
+            -- [丢弃物品逻辑]
+            -- 只有在确认物品数量增加后才执行丢弃
+            if afterCount > beforeCount then
+                local itemToDrop = player.Inventory:FindFirstChild(itemName)
+                if itemToDrop then
+                    pcall(function()
+                        remoteEvents.RequestBagDropItem:FireServer(sack, itemToDrop, true)
+                    end)
+                    -- library:Notify({Title = "丢弃成功", Text = "已丢弃一个" .. displayName, Duration = 1})
+                else
+                    library:Notify({Title = "丢弃失败", Text = "背包里找不到" .. displayName .. " 来丢弃", Duration = 3})
+                end
+            else
+                library:Notify({Title = "拾取验证失败", Text = "物品数量未增加，可能拾取失败。", Duration = 3})
+            end
+
+            -- 添加一个短暂的冷却时间，避免操作过快
+            task.wait(0.5) 
+
         else
-            library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
+            library:Notify({Title = "提示", Text = "地图上已找不到更多 " .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
-        
-        -- 防止过快执行
-        task.wait(0.5)
     end
-    
+
     if _G.isCollecting then
-        library:Notify({Title = "任务完成", Text = "所有收集任务已完成！", Duration = 5})
+        library:Notify({Title = "任务完成", Text = "原地刷物品任务完成！", Duration = 4})
     end
     _G.isCollecting = false
 end
+-- ==========================[新收集+丢弃逻辑 - 结束]==========================
 
 -- ESP
 local function toggleESP(itemName, displayName, color)
@@ -597,13 +408,8 @@ local function toggleESP(itemName, displayName, color)
     for _, item in ipairs(items) do createESP(item.part) end
 
     getgenv()[espKey].conn = Workspace.DescendantAdded:Connect(function(descendant)
-        if descendant.Name == itemName then
-            local primaryPart = nil
-            if descendant:IsA("Model") then
-                primaryPart = descendant.PrimaryPart or descendant:FindFirstChild("HumanoidRootPart") or descendant:FindFirstChild("Handle")
-            elseif descendant:IsA("BasePart") then
-                primaryPart = descendant
-            end
+        if descendant.Name == itemName and descendant:IsA("Model") then
+            local primaryPart = descendant.PrimaryPart or descendant:FindFirstChild("HumanoidRootPart") or descendant:FindFirstChild("Handle")
             if primaryPart then createESP(primaryPart) end
         end
     end)
@@ -950,6 +756,14 @@ local function generatePreview()
 end
 
 -- 单点种树（成功校验）
+local function getSaplingFolder()
+    local candidates = {"Items", "ltems", "WorldItems", "MapItems"}
+    for _, name in ipairs(candidates) do
+        local f = Workspace:FindFirstChild(name)
+        if f then return f end
+    end
+    return nil
+end
 local function plantSingleTreeAt(position)
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local folder = getSaplingFolder()
@@ -1289,33 +1103,7 @@ for _, item in ipairs(teleportItemConfig) do
     end)
 end
 
-local CollectTab = library:CreateTab("收集功能")
-CollectTab:NewButton("🔴 强制重置收集状态", function()
-    _G.isCollecting = false
-    library:Notify({Title = "状态重置", Text = "收集状态已强制重置为 false", Duration = 3})
-end)
-CollectTab:NewButton("🔍 调试物品搜索", function()
-    local itemName = "Bandage"  -- 可以改为你想调试的物品名
-    print("=== 搜索", itemName, "===")
-    
-    for _, descendant in ipairs(Workspace:GetDescendants()) do
-        if descendant.Name == itemName then
-            print("找到:", descendant.Name, "类型:", descendant.ClassName, "父级:", descendant.Parent.Name)
-            if descendant:IsA("Model") then
-                print("  - PrimaryPart:", descendant.PrimaryPart)
-                print("  - 子部件:")
-                for _, child in ipairs(descendant:GetChildren()) do
-                    if child:IsA("BasePart") then
-                        print("    -", child.Name, child.ClassName)
-                    end
-                end
-            end
-        end
-    end
-    
-    local found = findItems(itemName)
-    library:Notify({Title = "调试", Text = "找到 " .. #found .. " 个 " .. itemName, Duration = 3})
-end)
+local CollectTab = library:CreateTab("收集功能-优化版")
 CollectTab:NewButton("停止当前收集任务", function()
     if _G.isCollecting then
         _G.isCollecting = false
@@ -1333,16 +1121,37 @@ CollectTab:NewBox("自定义收集数量", "10", function(text)
         library:Notify({Title = "输入错误", Text = "请输入一个有效的正整数。", Duration = 3})
     end
 end)
+
+-- 优化：添加收集设置
+CollectTab:NewSeparator()
+CollectTab:NewButton("=== 收集优化设置 ===", function() end)
+CollectTab:NewSlider("最大重试次数", "Max_Retries", CollectSettings.MaxRetries, 1, 10, false, function(value)
+    CollectSettings.MaxRetries = value
+    library:Notify({Title = "设置", Text = "最大重试次数: " .. value, Duration = 2})
+end)
+CollectTab:NewSlider("重试延迟(秒)", "Retry_Delay", CollectSettings.RetryDelay, 1, 10, true, function(value)
+    CollectSettings.RetryDelay = value
+    library:Notify({Title = "设置", Text = "重试延迟: " .. value .. "秒", Duration = 2})
+end)
+CollectTab:NewSlider("拾取延迟(秒)", "Pickup_Delay", CollectSettings.PickupDelay, 0.5, 5, true, function(value)
+    CollectSettings.PickupDelay = value
+    library:Notify({Title = "设置", Text = "拾取延迟: " .. value .. "秒", Duration = 2})
+end)
+CollectTab:NewSlider("安全延迟(秒)", "Safety_Delay", CollectSettings.SafetyDelay, 0.5, 5, true, function(value)
+    CollectSettings.SafetyDelay = value
+    library:Notify({Title = "设置", Text = "安全延迟: " .. value .. "秒", Duration = 2})
+end)
+
 CollectTab:NewSeparator()
 for _, item in ipairs(collectItemConfig) do
-    CollectTab:NewButton("循环收集: "..item.display, function()
+    CollectTab:NewButton("循环收集: "..item.display.." (优化版)", function()
         if _G.isCollecting then
-            library:Notify({Title = "错误", Text = "已有收集任务在运行！请先停止或重置状态。", Duration = 4})
+            library:Notify({Title = "错误", Text = "已有收集任务在运行！请先停止。", Duration = 3})
             return
         end
-        _G.isCollecting = true
         task.spawn(function()
-            collectAndDropLoop(item.name, item.display, collectQuantity)
+            -- [已修改] 调用新的“拾取并丢弃”函数
+            collectAndDropNearbyLoop(item.name, item.display, collectQuantity)
         end)
     end)
 end
@@ -1460,9 +1269,9 @@ end)
 SettingsTab:NewButton("清除所有透视", ClearAllESP)
 
 library:Notify({
-    Title = "欢迎使用镜花水月（完整增强版）",
-    Text = "所有功能已优化！现在支持收集绷带等BasePart类型物品！",
-    Duration = 6
+    Title = "欢迎使用镜花水月-优化版",
+    Text = "已优化收集功能稳定性，支持重试机制和详细状态监控！",
+    Duration = 5
 })
 if setclipboard then
     setclipboard("1056584995")
