@@ -203,9 +203,10 @@ local function teleportToBonfire()
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
--- 收集
+-- 收集 (已替换为新的逻辑)
 function collectAndDropLoop(itemName, displayName, quantity)
     local MIN_SEARCH_DISTANCE = 15
+    local MAX_SEARCH_DISTANCE = 500 -- 可以根据需要调整最大搜索距离
     local TELEPORT_VERIFICATION_RANGE = 25
 
     local rootPart = Character:WaitForChild("HumanoidRootPart")
@@ -213,7 +214,8 @@ function collectAndDropLoop(itemName, displayName, quantity)
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local initialPosition = rootPart.Position
     local inventory = LP:WaitForChild("Inventory")
-    
+
+    -- (保留) 动态查找背包，比写死 "Old Sack" 更好
     local activeSack = nil
     for _, item in ipairs(inventory:GetChildren()) do
         if string.match(item.Name, "Sack$") then
@@ -227,9 +229,10 @@ function collectAndDropLoop(itemName, displayName, quantity)
         _G.isCollecting = false
         return
     end
-    
-    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName, Duration = 3})
 
+    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName, Duration = 3})
+    
+    -- (保留) 安全传送函数
     local function safeTeleport(targetPosition)
         rootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 4, 0))
         task.wait(0.1)
@@ -238,71 +241,47 @@ function collectAndDropLoop(itemName, displayName, quantity)
         Humanoid.PlatformStand = false
     end
 
-    local function dropItemAfterReturn(itemSample)
-        pcall(function()
-            if not itemSample or not itemSample.Parent then return end
-            local requestBagDrop = RemoteEvents:WaitForChild("RequestBagDropItem")
-            requestBagDrop:FireServer(activeSack, itemSample, true)
-        end)
-    end
-
-    local function pickupItem(itemModelOrPart)
-        local wasSuccessful = false
-        pcall(function()
-            local requestBagStore = RemoteEvents:WaitForChild("RequestBagStoreItem")
-            requestBagStore:InvokeServer(activeSack, itemModelOrPart)
-            wasSuccessful = true
-        end)
-        return wasSuccessful
-    end
-
-    local function findTargets()
-        local allItems = {}
-        local foldersToSearch = {Workspace, Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems")}
-        for _, folder in pairs(foldersToSearch) do
+    -- (重构) 查找目标物品的函数，基于你提供的 getLog 逻辑
+    local function findBestTarget()
+        local myPos = rootPart.Position
+        local bestTarget, closestDist = nil, MAX_SEARCH_DISTANCE
+        
+        local foldersToSearch = {Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems")}
+        for _, folder in ipairs(foldersToSearch) do
             if folder then
                 for _, item in ipairs(folder:GetChildren()) do
-                    if item.Name == itemName and (item:IsA("Model") or item:IsA("BasePart")) then
-                        table.insert(allItems, item)
+                    if item.Name == itemName then
+                        local itemPart = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
+                        if itemPart then
+                            local dist = (myPos - itemPart.Position).Magnitude
+                            if dist >= MIN_SEARCH_DISTANCE and dist < closestDist then
+                                closestDist = dist
+                                bestTarget = item
+                            end
+                        end
                     end
                 end
             end
         end
-        if #allItems == 0 then return nil, nil end
-        local closestTarget, minDistance = nil, math.huge
-        for _, item in ipairs(allItems) do
-            local primaryPart = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart") or item
-            if primaryPart then
-                local distance = (primaryPart.Position - initialPosition).Magnitude
-                if distance < minDistance and distance > MIN_SEARCH_DISTANCE then
-                    minDistance = distance
-                    closestTarget = item
-                end
-            end
-        end
-        local dropSample = nil
-        for _, item in ipairs(allItems) do
-            if item ~= closestTarget then dropSample = item; break end
-        end
-        if not dropSample and closestTarget then dropSample = closestTarget
-        elseif #allItems > 0 and not dropSample then dropSample = allItems[1] end
-        return closestTarget, dropSample
+        return bestTarget
     end
-
+    
+    -- 主循环
     for i = 1, quantity do
         if not _G.isCollecting then
             library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。", Duration = 3})
             break
         end
 
-        local pickupTarget, dropSample = findTargets()
+        local pickupTarget = findBestTarget()
 
         if pickupTarget then
             local targetPart = pickupTarget.PrimaryPart or pickupTarget:FindFirstChildWhichIsA("BasePart") or pickupTarget
             
+            -- 1. 传送到目标
             safeTeleport(targetPart.Position)
-            task.wait(0.05)
 
+            -- (保留) 检查传送是否被服务器拉回
             local distanceAfterTeleport = (rootPart.Position - targetPart.Position).Magnitude
             if distanceAfterTeleport > TELEPORT_VERIFICATION_RANGE then
                 library:Notify({Title = "错误", Text = "传送被服务器拉回！正在返回篝火...", Duration = 4})
@@ -312,33 +291,55 @@ function collectAndDropLoop(itemName, displayName, quantity)
                 break
             end
             
-            local pickupSuccess = pickupItem(pickupTarget)
+            -- 2. 执行你提供的新拾取序列
+            pcall(function()
+                RemoteEvents.EquipItemHandle:FireServer("FireAllClients", activeSack)
+                task.wait(0.05)
+                RemoteEvents.RequestStartDraggingItem:FireServer(pickupTarget)
+                task.wait(0.05)
+                RemoteEvents.RequestBagStoreItem:InvokeServer(activeSack, pickupTarget)
+                task.wait(0.05)
+                RemoteEvents.StopDraggingItem:FireServer(pickupTarget)
+                RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
+            end)
+            task.wait(0.1)
+
+            -- 3. 传送回篝火
+            safeTeleport(initialPosition)
             
-            if pickupSuccess then
-                safeTeleport(initialPosition)
-                task.wait(0.05)
-
-                local distanceAfterReturn = (rootPart.Position - initialPosition).Magnitude
-                if distanceAfterReturn > TELEPORT_VERIFICATION_RANGE then
-                    library:Notify({Title = "错误", Text = "返回时被服务器拉回！正在尝试校正位置...", Duration = 4})
-                    rootPart.CFrame = CFrame.new(BONFIRE_POSITION + Vector3.new(0, 4, 0))
-                    task.wait(0.2)
-                    _G.isCollecting = false
-                    break
-                end
-
-                dropItemAfterReturn(dropSample)
-                task.wait(0.05)
-            else
-                library:Notify({Title = "警告", Text = "拾取失败，跳过当前目标。", Duration = 3})
-                task.wait(1)
+            -- (保留) 检查返回是否被服务器拉回
+            local distanceAfterReturn = (rootPart.Position - initialPosition).Magnitude
+            if distanceAfterReturn > TELEPORT_VERIFICATION_RANGE then
+                library:Notify({Title = "错误", Text = "返回时被服务器拉回！正在尝试校正位置...", Duration = 4})
+                rootPart.CFrame = CFrame.new(BONFIRE_POSITION + Vector3.new(0, 4, 0))
+                task.wait(0.2)
+                _G.isCollecting = false
+                break
             end
+
+            -- 4. 执行你提供的新丢弃序列
+            pcall(function()
+                local itemInWorldSample = workspace.Items:FindFirstChild(itemName) or workspace.ltems:FindFirstChild(itemName)
+                local itemInInventory = inventory:FindFirstChild(itemName)
+
+                if itemInWorldSample and itemInInventory then
+                    local dropEvent = RemoteEvents.RequestBagDropItem
+                    RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
+                    task.wait(0.05)
+                    -- 注意：这里使用 itemInInventory 来确保丢弃的是我们刚捡到的物品类型
+                    dropEvent:FireServer(activeSack, itemInInventory, true)
+                else
+                     library:Notify({Title = "警告", Text = "无法在背包中找到刚拾取的物品用于丢弃。", Duration = 3})
+                end
+            end)
+            task.wait(0.1)
+
         else
             library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
     end
-    
+
     if _G.isCollecting then
         library:Notify({Title = "任务完成", Text = "所有收集任务已完成！", Duration = 5})
     end
@@ -767,7 +768,7 @@ local function plantSingleTreeAt(position)
     local before = countSaplingsIn(folder)
     local sapling = folder:FindFirstChild("Sapling")
     if not sapling then return false end
-    
+
     local groundPos = position
     local ok, ret = pcall(function()
         RemoteEvents.RequestStartDraggingItem:FireServer(sapling)
@@ -939,7 +940,7 @@ RunService.Heartbeat:Connect(function()
         library:Notify({ Title = "警告", Text = "血量过低！正在传送回篝火...", Duration = 3 })
         teleportToBonfire()
     end
-    
+
     if Features.GodMode and now - lastGodModeTrigger >= 0.5 then
         lastGodModeTrigger = now
         pcall(function()
