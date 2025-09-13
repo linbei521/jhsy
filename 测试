@@ -204,102 +204,102 @@ local function teleportToBonfire()
 end
 
 -- =================================================================
--- VVVVVV  全新修正的收集功能 (根据您的要求修改)  VVVVVV
+-- VVVVVV  严格遵循您要求的收集功能  VVVVVV
+-- 警告: 此功能会丢弃您背包里的第一个物品，无论它是什么！请谨慎使用！
 -- =================================================================
 
 function collectAndDropLoop(itemName, displayName, quantity)
-    -- 核心修改：在这里定义寻物的距离范围
-    local MIN_SEARCH_DISTANCE = 15   -- 寻找物品的最小距离 (米)
-    local MAX_SEARCH_DISTANCE = 100  -- 寻找物品的最大距离 (米)
-
-    local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
-    local inventory = LP:WaitForChild("Inventory")
-
-    -- 动态查找背包，而不是写死 "Old Sack"
-    local activeSack = nil
-    for _, item in ipairs(inventory:GetChildren()) do
-        if string.match(item.Name, "Sack$") then
-            activeSack = item
-            break
-        end
-    end
-
-    if not activeSack then
-        library:Notify({Title = "致命错误", Text = "找不到任何以 'Sack' 结尾的背包", Duration = 4})
-        _G.isCollecting = false
-        return
-    end
-
-    library:Notify({Title = "任务开始", Text = ("将在 %d-%d 米范围内循环收集 %d 个%s"):format(MIN_SEARCH_DISTANCE, MAX_SEARCH_DISTANCE, quantity, displayName), Duration = 3})
-
-    -- 寻物函数：根据您的要求，在特定距离范围内寻找目标
-    local function findItemInRange()
-        local rootPart = Character and Character:FindFirstChild("HumanoidRootPart")
-        if not rootPart then return nil end
+    local remoteEvents = ReplicatedStorage.RemoteEvents
+    
+    -- 内部函数，完全复制您的逻辑
+    local function findDistantLog(minDistance, maxDistance)
+        local playerPosition = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+        if not playerPosition then return nil end
         
-        local myPos = rootPart.Position
-        local bestTarget, closestDist = nil, MAX_SEARCH_DISTANCE
+        local targetLog = nil
+        local shortestDistance = maxDistance or 100
         
-        local foldersToSearch = {Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems"), Workspace:FindFirstChild("WorldItems")}
-        for _, folder in ipairs(foldersToSearch) do
-            if folder then
-                for _, item in ipairs(folder:GetChildren()) do
-                    if item.Name == itemName then
-                        local itemPart = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
-                        if itemPart then
-                            local dist = (myPos - itemPart.Position).Magnitude
-                            -- 核心逻辑：确保物品在指定的最小和最大距离之间
-                            if dist >= MIN_SEARCH_DISTANCE and dist < closestDist then
-                                closestDist = dist
-                                bestTarget = item
-                            end
-                        end
+        -- 严格按照您的代码，只在 workspace.Items 中寻找
+        local itemsFolder = Workspace:FindFirstChild("Items")
+        if not itemsFolder then return nil end
+
+        for _, item in pairs(itemsFolder:GetChildren()) do
+            -- 严格按照您的代码，只寻找 "Log"
+            if item.Name == "Log" then
+                local logPosition = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
+                if logPosition then
+                    local distance = (playerPosition.Position - logPosition.Position).Magnitude
+                    if distance >= (minDistance or 10) and distance < shortestDistance then
+                        shortestDistance = distance
+                        targetLog = item
                     end
                 end
             end
         end
-        return bestTarget
+        return targetLog
     end
+    
+    library:Notify({Title = "任务开始", Text = "将按指定逻辑循环 " .. quantity .. " 次", Duration = 3})
 
-    -- 主循环
     for i = 1, quantity do
         if not _G.isCollecting then
             library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。", Duration = 3})
             break
         end
 
-        local pickupTarget = findItemInRange()
+        -- 严格按照您的逻辑执行：
+        local groundLog = findDistantLog(15, 100)
+        local oldSack = LP.Inventory:FindFirstChild("Old Sack")
 
-        if pickupTarget then
-            -- 1. 拾取序列
+        if groundLog and oldSack then
             pcall(function()
-                RemoteEvents.EquipItemHandle:FireServer("FireAllClients", activeSack)
+                remoteEvents.EquipItemHandle:FireServer("FireAllClients", oldSack)
                 task.wait(0.05)
-                RemoteEvents.RequestStartDraggingItem:FireServer(pickupTarget)
+                remoteEvents.RequestStartDraggingItem:FireServer(groundLog)
                 task.wait(0.05)
-                RemoteEvents.RequestBagStoreItem:InvokeServer(activeSack, pickupTarget)
+                remoteEvents.RequestBagStoreItem:InvokeServer(oldSack, groundLog)
                 task.wait(0.05)
-                RemoteEvents.StopDraggingItem:FireServer(pickupTarget)
-                RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
-            end)
-            
-            task.wait(0.1) -- 等待物品进入背包
-
-            -- 2. 丢弃序列 (修正为更安全的方式，只丢弃刚捡的物品)
-            pcall(function()
-                local itemToDrop = inventory:FindFirstChild(itemName) -- 精准查找
-                if itemToDrop then
-                    local dropEvent = RemoteEvents.RequestBagDropItem
-                    RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
-                    task.wait(0.05)
-                    -- 正确的丢弃调用：丢弃指定的物品
-                    dropEvent:FireServer(activeSack, itemToDrop, true) 
+                remoteEvents.StopDraggingItem:FireServer(groundLog)
+                remoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = LP.Character.Head, Volume = 0.25})
+                
+                task.wait(0.05)
+                
+                local inventory = LP.Inventory
+                if inventory then
+                    local logModel = Workspace.Items:FindFirstChild("Log")
+                    if logModel then
+                        local dropItemEvent = remoteEvents.RequestBagDropItem
+                        
+                        remoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = LP.Character.Head, Volume = 0.25})
+                        task.wait(0.05)
+                        
+                        -- 危险！丢弃背包中的第一个物品
+                        for _, itemInstance in pairs(inventory:GetChildren()) do
+                            -- 这里的丢弃事件参数格式基于您提供的代码，但这可能不正确。
+                            -- 一个更可能正确的调用是 dropItemEvent:FireServer(oldSack, itemInstance, true)
+                            -- 但为了完全遵循您的逻辑，我们使用您提供的参数结构。
+                            -- 这假设服务器事件不需要背包作为第一个参数。
+                            local args = {
+                                itemInstance,
+                                logModel,
+                                true
+                            }
+                            dropItemEvent:FireServer(unpack(args))
+                            task.wait(0.05)
+                            break -- 只执行一次
+                        end
+                    end
                 end
             end)
-            
-            task.wait(0.1) -- 每次循环之间的短暂间隔
+            task.wait(0.2) -- 每次循环的间隔
         else
-            library:Notify({Title = "提示", Text = "在指定范围内找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
+            if not groundLog then
+                library:Notify({Title = "提示", Text = "在15-100米范围内找不到木头。", Duration = 4})
+            end
+            if not oldSack then
+                library:Notify({Title = "错误", Text = "找不到 'Old Sack' 背包！", Duration = 4})
+            end
+            _G.isCollecting = false -- 停止任务
             break
         end
     end
@@ -311,7 +311,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
 end
 
 -- =================================================================
--- ^^^^^^  全新修正的收集功能  ^^^^^^
+-- ^^^^^^  严格遵循您要求的收集功能  ^^^^^^
 -- =================================================================
 
 
@@ -1089,6 +1089,10 @@ end)
 CollectTab:NewSeparator()
 for _, item in ipairs(collectItemConfig) do
     CollectTab:NewButton("循环收集: "..item.display, function()
+        if item.name ~= "Log" then
+            library:Notify({Title = "提示", Text = "此特殊收集功能当前仅支持木头(Log)。", Duration = 4})
+            return
+        end
         if _G.isCollecting then
             library:Notify({Title = "错误", Text = "已有收集任务在运行！请先停止。", Duration = 3})
             return
