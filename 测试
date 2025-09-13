@@ -204,17 +204,17 @@ local function teleportToBonfire()
 end
 
 -- =================================================================
--- VVVVVV  新的收集功能在这里  VVVVVV
+-- VVVVVV  全新修正的收集功能  VVVVVV
 -- =================================================================
 
 function collectAndDropLoop(itemName, displayName, quantity)
-    local MIN_SEARCH_DISTANCE = 0 -- 从0米开始搜索
-    local MAX_SEARCH_DISTANCE = 30 -- 在30米范围内搜索
+    local MIN_SEARCH_DISTANCE = 0    -- 从0米开始搜索
+    local MAX_SEARCH_DISTANCE = 30   -- 在30米范围内搜索
 
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local inventory = LP:WaitForChild("Inventory")
 
-    -- 动态查找背包，以获得更好的兼容性
+    -- 动态查找背包
     local activeSack = nil
     for _, item in ipairs(inventory:GetChildren()) do
         if string.match(item.Name, "Sack$") then
@@ -231,7 +231,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
 
     library:Notify({Title = "任务开始", Text = "将在原地循环收集 " .. quantity .. " 个" .. displayName, Duration = 3})
 
-    -- 在玩家附近查找目标物品的函数
+    -- 在玩家附近查找目标物品
     local function findNearbyItem()
         local rootPart = Character and Character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return nil end
@@ -239,7 +239,6 @@ function collectAndDropLoop(itemName, displayName, quantity)
         local myPos = rootPart.Position
         local bestTarget, closestDist = nil, MAX_SEARCH_DISTANCE
         
-        -- 在多个可能的文件夹中搜索
         local foldersToSearch = {Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems"), Workspace:FindFirstChild("WorldItems")}
         for _, folder in ipairs(foldersToSearch) do
             if folder then
@@ -270,7 +269,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
         local pickupTarget = findNearbyItem()
 
         if pickupTarget then
-            -- 执行拾取序列
+            -- 1. 拾取序列
             pcall(function()
                 RemoteEvents.EquipItemHandle:FireServer("FireAllClients", activeSack)
                 task.wait(0.05)
@@ -282,25 +281,23 @@ function collectAndDropLoop(itemName, displayName, quantity)
                 RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
             end)
             
-            task.wait(0.1) -- 等待物品进入背包
+            task.wait(0.05) -- 等待物品进入背包
 
-            -- 执行丢弃序列
+            -- 2. 丢弃序列
             pcall(function()
-                -- 智能修正：确保丢弃的是我们刚刚拾取的物品类型
                 local itemToDrop = inventory:FindFirstChild(itemName)
-                local itemSampleInWorld = findNearbyItem() or pickupTarget -- 找一个世界上的样本用于丢弃事件
+                local itemSampleInWorld = Workspace.Items:FindFirstChild(itemName) or Workspace.ltems:FindFirstChild(itemName) or pickupTarget
 
                 if itemToDrop and itemSampleInWorld then
                     local dropEvent = RemoteEvents.RequestBagDropItem
                     RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
                     task.wait(0.05)
-                    dropEvent:FireServer(activeSack, itemToDrop, true)
-                else
-                    -- library:Notify({Title = "警告", Text = "无法在背包中找到刚拾取的物品用于丢弃。", Duration = 3})
+                    -- 正确的丢弃调用
+                    dropEvent:FireServer(activeSack, itemToDrop, true) 
                 end
             end)
             
-            task.wait(1) -- 每次循环之间等待1秒，防止操作过快
+            task.wait(0.05) -- 每次循环之间的短暂间隔
         else
             library:Notify({Title = "提示", Text = "附近找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
@@ -314,7 +311,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
 end
 
 -- =================================================================
--- ^^^^^^  新的收集功能在这里  ^^^^^^
+-- ^^^^^^  全新修正的收集功能  ^^^^^^
 -- =================================================================
 
 -- ESP
