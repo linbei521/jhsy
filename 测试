@@ -204,20 +204,11 @@ local function teleportToBonfire()
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
--- ==================== 新的收集功能 ====================
--- 基于你提供的代码进行修改和整合，此版本不使用传送。
+-- ==================== 修正后的收集功能 ====================
+-- 结合了“就近收集”的思路和原始脚本中更稳定的物品操作方法
 function collectAndDropLoop(itemName, displayName, quantity)
-    local rootPart = Character and Character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then
-        library:Notify({Title = "错误", Text = "找不到玩家角色。", Duration = 3})
-        _G.isCollecting = false
-        return
-    end
-    
-    local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local inventory = LP:WaitForChild("Inventory")
     
-    -- 动态查找背包
     local activeSack = nil
     for _, item in ipairs(inventory:GetChildren()) do
         if string.match(item.Name, "Sack$") then
@@ -227,15 +218,19 @@ function collectAndDropLoop(itemName, displayName, quantity)
     end
 
     if not activeSack then
-        library:Notify({Title = "错误", Text = "找不到任何背包 (Sack)！", Duration = 4})
+        library:Notify({Title = "致命错误", Text = "找不到任何以 'Sack' 结尾的背包", Duration = 4})
         _G.isCollecting = false
         return
     end
     
-    library:Notify({Title = "任务开始", Text = "将在原地收集 " .. quantity .. " 个" .. displayName, Duration = 3})
+    library:Notify({Title = "任务开始", Text = "将在原地循环收集 " .. quantity .. " 个" .. displayName, Duration = 3})
 
     -- 在附近寻找物品的函数
     local function findNearbyItem(name, minDistance, maxDistance)
+        local currentCharacter = LP.Character
+        local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+        if not rootPart then return nil end
+
         local playerPosition = rootPart.Position
         local targetItem = nil
         local bestDistance = maxDistance or 150
@@ -244,7 +239,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
         for _, folder in pairs(foldersToSearch) do
             if folder then
                 for _, item in ipairs(folder:GetChildren()) do
-                    if item.Name == name then
+                    if item.Name == name and item:IsA("Model") then
                         local itemPart = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
                         if itemPart then
                             local distance = (playerPosition - itemPart.Position).Magnitude
@@ -265,35 +260,40 @@ function collectAndDropLoop(itemName, displayName, quantity)
             library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。", Duration = 3})
             break
         end
+        
+        -- 每次循环都检查角色，防止重生后出错
+        local currentCharacter = LP.Character
+        if not (currentCharacter and currentCharacter.Parent) then
+             library:Notify({Title = "错误", Text = "玩家角色丢失，任务中断。", Duration = 3})
+             break
+        end
 
         local targetToPickUp = findNearbyItem(itemName, 10, 150)
 
         if targetToPickUp then
-            -- 拾取过程
+            -- 使用原始脚本中更稳定的拾取方法
+            local pickupSuccess = false
             pcall(function()
-                RemoteEvents.RequestStartDraggingItem:FireServer(targetToPickUp)
-                task.wait(0.05)
-                RemoteEvents.RequestBagStoreItem:InvokeServer(activeSack, targetToPickUp)
-                task.wait(0.05)
-                RemoteEvents.StopDraggingItem:FireServer(targetToPickUp)
-                RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
+                ReplicatedStorage.RemoteEvents.RequestBagStoreItem:InvokeServer(activeSack, targetToPickUp)
+                pickupSuccess = true
             end)
             
             task.wait(0.1) -- 等待物品进入背包
             
-            -- 丢弃过程
-            pcall(function()
-                -- 找到一个同名物品作为丢弃的“样本”，这是更安全的做法
-                local dropSample = findNearbyItem(itemName, 0, 9e9) or targetToPickUp
-                if dropSample then
-                    local dropItemEvent = RemoteEvents:WaitForChild("RequestBagDropItem")
-                    RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
-                    task.wait(0.05)
-                    dropItemEvent:FireServer(activeSack, dropSample, true)
-                end
-            end)
+            if pickupSuccess then
+                -- 使用原始脚本中更安全的丢弃方法
+                pcall(function()
+                    -- 找到任意一个同名物品作为丢弃的“样本”
+                    local dropSample = Workspace:FindFirstChild(itemName, true) or targetToPickUp
+                    if dropSample then
+                        ReplicatedStorage.RemoteEvents.RequestBagDropItem:FireServer(activeSack, dropSample, true)
+                    end
+                end)
+            else
+                 library:Notify({Title = "警告", Text = "拾取失败，跳过当前目标。", Duration = 3})
+            end
             
-            task.wait(0.2) -- 每个循环之间的延迟
+            task.wait(0.3) -- 每个循环之间的总延迟
         else
             library:Notify({Title = "提示", Text = "附近找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
@@ -884,8 +884,8 @@ local lastKillAura, lastAutoChop, lastGodModeTrigger = 0, 0, 0
 local connection
 RunService.Heartbeat:Connect(function()
     local now = tick()
+    Character = LP.Character or LP.CharacterAdded:Wait()
     if not Character or not Character:FindFirstChild("HumanoidRootPart") or not Character:FindFirstChildOfClass("Humanoid") then
-        Character = LP.Character or LP.CharacterAdded:Wait()
         return
     end
     local humanoid = Character:FindFirstChildOfClass("Humanoid")
