@@ -204,17 +204,18 @@ local function teleportToBonfire()
 end
 
 -- =================================================================
--- VVVVVV  全新修正的收集功能  VVVVVV
+-- VVVVVV  全新修正的收集功能 (根据您的要求修改)  VVVVVV
 -- =================================================================
 
 function collectAndDropLoop(itemName, displayName, quantity)
-    local MIN_SEARCH_DISTANCE = 0    -- 从0米开始搜索
-    local MAX_SEARCH_DISTANCE = 30   -- 在30米范围内搜索
+    -- 核心修改：在这里定义寻物的距离范围
+    local MIN_SEARCH_DISTANCE = 15   -- 寻找物品的最小距离 (米)
+    local MAX_SEARCH_DISTANCE = 100  -- 寻找物品的最大距离 (米)
 
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local inventory = LP:WaitForChild("Inventory")
 
-    -- 动态查找背包
+    -- 动态查找背包，而不是写死 "Old Sack"
     local activeSack = nil
     for _, item in ipairs(inventory:GetChildren()) do
         if string.match(item.Name, "Sack$") then
@@ -229,10 +230,10 @@ function collectAndDropLoop(itemName, displayName, quantity)
         return
     end
 
-    library:Notify({Title = "任务开始", Text = "将在原地循环收集 " .. quantity .. " 个" .. displayName, Duration = 3})
+    library:Notify({Title = "任务开始", Text = ("将在 %d-%d 米范围内循环收集 %d 个%s"):format(MIN_SEARCH_DISTANCE, MAX_SEARCH_DISTANCE, quantity, displayName), Duration = 3})
 
-    -- 在玩家附近查找目标物品
-    local function findNearbyItem()
+    -- 寻物函数：根据您的要求，在特定距离范围内寻找目标
+    local function findItemInRange()
         local rootPart = Character and Character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return nil end
         
@@ -247,6 +248,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
                         local itemPart = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
                         if itemPart then
                             local dist = (myPos - itemPart.Position).Magnitude
+                            -- 核心逻辑：确保物品在指定的最小和最大距离之间
                             if dist >= MIN_SEARCH_DISTANCE and dist < closestDist then
                                 closestDist = dist
                                 bestTarget = item
@@ -266,7 +268,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
             break
         end
 
-        local pickupTarget = findNearbyItem()
+        local pickupTarget = findItemInRange()
 
         if pickupTarget then
             -- 1. 拾取序列
@@ -281,25 +283,23 @@ function collectAndDropLoop(itemName, displayName, quantity)
                 RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
             end)
             
-            task.wait(0.05) -- 等待物品进入背包
+            task.wait(0.1) -- 等待物品进入背包
 
-            -- 2. 丢弃序列
+            -- 2. 丢弃序列 (修正为更安全的方式，只丢弃刚捡的物品)
             pcall(function()
-                local itemToDrop = inventory:FindFirstChild(itemName)
-                local itemSampleInWorld = Workspace.Items:FindFirstChild(itemName) or Workspace.ltems:FindFirstChild(itemName) or pickupTarget
-
-                if itemToDrop and itemSampleInWorld then
+                local itemToDrop = inventory:FindFirstChild(itemName) -- 精准查找
+                if itemToDrop then
                     local dropEvent = RemoteEvents.RequestBagDropItem
                     RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
                     task.wait(0.05)
-                    -- 正确的丢弃调用
+                    -- 正确的丢弃调用：丢弃指定的物品
                     dropEvent:FireServer(activeSack, itemToDrop, true) 
                 end
             end)
             
-            task.wait(0.05) -- 每次循环之间的短暂间隔
+            task.wait(0.1) -- 每次循环之间的短暂间隔
         else
-            library:Notify({Title = "提示", Text = "附近找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
+            library:Notify({Title = "提示", Text = "在指定范围内找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
     end
@@ -313,6 +313,7 @@ end
 -- =================================================================
 -- ^^^^^^  全新修正的收集功能  ^^^^^^
 -- =================================================================
+
 
 -- ESP
 local function toggleESP(itemName, displayName, color)
