@@ -204,9 +204,15 @@ local function teleportToBonfire()
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
--- ==================== 修正后的收集功能 ====================
--- 结合了“就近收集”的思路和原始脚本中更稳定的物品操作方法
+-- 收集
 function collectAndDropLoop(itemName, displayName, quantity)
+    local MIN_SEARCH_DISTANCE = 15
+    local TELEPORT_VERIFICATION_RANGE = 25
+
+    local rootPart = Character:WaitForChild("HumanoidRootPart")
+    local Humanoid = Character:WaitForChild("Humanoid")
+    local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
+    local initialPosition = rootPart.Position
     local inventory = LP:WaitForChild("Inventory")
     
     local activeSack = nil
@@ -223,36 +229,65 @@ function collectAndDropLoop(itemName, displayName, quantity)
         return
     end
     
-    library:Notify({Title = "任务开始", Text = "将在原地循环收集 " .. quantity .. " 个" .. displayName, Duration = 3})
+    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName, Duration = 3})
 
-    -- 在附近寻找物品的函数
-    local function findNearbyItem(name, minDistance, maxDistance)
-        local currentCharacter = LP.Character
-        local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-        if not rootPart then return nil end
+    local function safeTeleport(targetPosition)
+        rootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 4, 0))
+        task.wait(0.1)
+        Humanoid.PlatformStand = true
+        task.wait(0.1)
+        Humanoid.PlatformStand = false
+    end
 
-        local playerPosition = rootPart.Position
-        local targetItem = nil
-        local bestDistance = maxDistance or 150
-        
+    local function dropItemAfterReturn(itemSample)
+        pcall(function()
+            if not itemSample or not itemSample.Parent then return end
+            local requestBagDrop = RemoteEvents:WaitForChild("RequestBagDropItem")
+            requestBagDrop:FireServer(activeSack, itemSample, true)
+        end)
+    end
+
+    local function pickupItem(itemModelOrPart)
+        local wasSuccessful = false
+        pcall(function()
+            local requestBagStore = RemoteEvents:WaitForChild("RequestBagStoreItem")
+            requestBagStore:InvokeServer(activeSack, itemModelOrPart)
+            wasSuccessful = true
+        end)
+        return wasSuccessful
+    end
+
+    local function findTargets()
+        local allItems = {}
         local foldersToSearch = {Workspace, Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems")}
         for _, folder in pairs(foldersToSearch) do
             if folder then
                 for _, item in ipairs(folder:GetChildren()) do
-                    if item.Name == name and item:IsA("Model") then
-                        local itemPart = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
-                        if itemPart then
-                            local distance = (playerPosition - itemPart.Position).Magnitude
-                            if distance >= (minDistance or 10) and distance < bestDistance then
-                                bestDistance = distance
-                                targetItem = item
-                            end
-                        end
+                    if item.Name == itemName and (item:IsA("Model") or item:IsA("BasePart")) then
+                        table.insert(allItems, item)
                     end
                 end
             end
         end
-        return targetItem
+        if #allItems == 0 then return nil, nil end
+        local closestTarget, minDistance = nil, math.huge
+        for _, item in ipairs(allItems) do
+            local primaryPart = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart") or item
+            if primaryPart then
+                local distance = (primaryPart.Position - initialPosition).Magnitude
+                if distance < minDistance and distance > MIN_SEARCH_DISTANCE then
+                    minDistance = distance
+                    closestTarget = item
+                end
+            end
+        end
+        local dropSample = nil
+        for _, item in ipairs(allItems) do
+            if item ~= closestTarget then dropSample = item; break end
+        end
+        if not dropSample and closestTarget then dropSample = closestTarget
+        elseif #allItems > 0 and not dropSample then dropSample = allItems[1] end
+        return closestTarget, dropSample
     end
 
     for i = 1, quantity do
@@ -260,42 +295,47 @@ function collectAndDropLoop(itemName, displayName, quantity)
             library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。", Duration = 3})
             break
         end
-        
-        -- 每次循环都检查角色，防止重生后出错
-        local currentCharacter = LP.Character
-        if not (currentCharacter and currentCharacter.Parent) then
-             library:Notify({Title = "错误", Text = "玩家角色丢失，任务中断。", Duration = 3})
-             break
-        end
 
-        local targetToPickUp = findNearbyItem(itemName, 10, 150)
+        local pickupTarget, dropSample = findTargets()
 
-        if targetToPickUp then
-            -- 使用原始脚本中更稳定的拾取方法
-            local pickupSuccess = false
-            pcall(function()
-                ReplicatedStorage.RemoteEvents.RequestBagStoreItem:InvokeServer(activeSack, targetToPickUp)
-                pickupSuccess = true
-            end)
+        if pickupTarget then
+            local targetPart = pickupTarget.PrimaryPart or pickupTarget:FindFirstChildWhichIsA("BasePart") or pickupTarget
             
-            task.wait(0.1) -- 等待物品进入背包
-            
-            if pickupSuccess then
-                -- 使用原始脚本中更安全的丢弃方法
-                pcall(function()
-                    -- 找到任意一个同名物品作为丢弃的“样本”
-                    local dropSample = Workspace:FindFirstChild(itemName, true) or targetToPickUp
-                    if dropSample then
-                        ReplicatedStorage.RemoteEvents.RequestBagDropItem:FireServer(activeSack, dropSample, true)
-                    end
-                end)
-            else
-                 library:Notify({Title = "警告", Text = "拾取失败，跳过当前目标。", Duration = 3})
+            safeTeleport(targetPart.Position)
+            task.wait(0.05)
+
+            local distanceAfterTeleport = (rootPart.Position - targetPart.Position).Magnitude
+            if distanceAfterTeleport > TELEPORT_VERIFICATION_RANGE then
+                library:Notify({Title = "错误", Text = "传送被服务器拉回！正在返回篝火...", Duration = 4})
+                rootPart.CFrame = CFrame.new(BONFIRE_POSITION + Vector3.new(0, 4, 0))
+                task.wait(0.2)
+                _G.isCollecting = false
+                break
             end
             
-            task.wait(0.3) -- 每个循环之间的总延迟
+            local pickupSuccess = pickupItem(pickupTarget)
+            
+            if pickupSuccess then
+                safeTeleport(initialPosition)
+                task.wait(0.05)
+
+                local distanceAfterReturn = (rootPart.Position - initialPosition).Magnitude
+                if distanceAfterReturn > TELEPORT_VERIFICATION_RANGE then
+                    library:Notify({Title = "错误", Text = "返回时被服务器拉回！正在尝试校正位置...", Duration = 4})
+                    rootPart.CFrame = CFrame.new(BONFIRE_POSITION + Vector3.new(0, 4, 0))
+                    task.wait(0.2)
+                    _G.isCollecting = false
+                    break
+                end
+
+                dropItemAfterReturn(dropSample)
+                task.wait(0.05)
+            else
+                library:Notify({Title = "警告", Text = "拾取失败，跳过当前目标。", Duration = 3})
+                task.wait(1)
+            end
         else
-            library:Notify({Title = "提示", Text = "附近找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
+            library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
     end
@@ -305,8 +345,6 @@ function collectAndDropLoop(itemName, displayName, quantity)
     end
     _G.isCollecting = false
 end
--- =======================================================
-
 
 -- ESP
 local function toggleESP(itemName, displayName, color)
@@ -884,8 +922,8 @@ local lastKillAura, lastAutoChop, lastGodModeTrigger = 0, 0, 0
 local connection
 RunService.Heartbeat:Connect(function()
     local now = tick()
-    Character = LP.Character or LP.CharacterAdded:Wait()
     if not Character or not Character:FindFirstChild("HumanoidRootPart") or not Character:FindFirstChildOfClass("Humanoid") then
+        Character = LP.Character or LP.CharacterAdded:Wait()
         return
     end
     local humanoid = Character:FindFirstChildOfClass("Humanoid")
@@ -1090,7 +1128,7 @@ for _, item in ipairs(collectItemConfig) do
         task.spawn(function()
             collectAndDropLoop(item.name, item.display, collectQuantity)
         end)
-    end
+    end)
 end
 
 -- 种树板块（Section区分）
