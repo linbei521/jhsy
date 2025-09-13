@@ -203,19 +203,18 @@ local function teleportToBonfire()
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
--- 收集 (已替换为新的逻辑)
-function collectAndDropLoop(itemName, displayName, quantity)
-    local MIN_SEARCH_DISTANCE = 15
-    local MAX_SEARCH_DISTANCE = 500 -- 可以根据需要调整最大搜索距离
-    local TELEPORT_VERIFICATION_RANGE = 25
+-- =================================================================
+-- VVVVVV  新的收集功能在这里  VVVVVV
+-- =================================================================
 
-    local rootPart = Character:WaitForChild("HumanoidRootPart")
-    local Humanoid = Character:WaitForChild("Humanoid")
+function collectAndDropLoop(itemName, displayName, quantity)
+    local MIN_SEARCH_DISTANCE = 0 -- 从0米开始搜索
+    local MAX_SEARCH_DISTANCE = 30 -- 在30米范围内搜索
+
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
-    local initialPosition = rootPart.Position
     local inventory = LP:WaitForChild("Inventory")
 
-    -- (保留) 动态查找背包，比写死 "Old Sack" 更好
+    -- 动态查找背包，以获得更好的兼容性
     local activeSack = nil
     for _, item in ipairs(inventory:GetChildren()) do
         if string.match(item.Name, "Sack$") then
@@ -230,23 +229,18 @@ function collectAndDropLoop(itemName, displayName, quantity)
         return
     end
 
-    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName, Duration = 3})
-    
-    -- (保留) 安全传送函数
-    local function safeTeleport(targetPosition)
-        rootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 4, 0))
-        task.wait(0.1)
-        Humanoid.PlatformStand = true
-        task.wait(0.1)
-        Humanoid.PlatformStand = false
-    end
+    library:Notify({Title = "任务开始", Text = "将在原地循环收集 " .. quantity .. " 个" .. displayName, Duration = 3})
 
-    -- (重构) 查找目标物品的函数，基于你提供的 getLog 逻辑
-    local function findBestTarget()
+    -- 在玩家附近查找目标物品的函数
+    local function findNearbyItem()
+        local rootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then return nil end
+        
         local myPos = rootPart.Position
         local bestTarget, closestDist = nil, MAX_SEARCH_DISTANCE
         
-        local foldersToSearch = {Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems")}
+        -- 在多个可能的文件夹中搜索
+        local foldersToSearch = {Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems"), Workspace:FindFirstChild("WorldItems")}
         for _, folder in ipairs(foldersToSearch) do
             if folder then
                 for _, item in ipairs(folder:GetChildren()) do
@@ -265,7 +259,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
         end
         return bestTarget
     end
-    
+
     -- 主循环
     for i = 1, quantity do
         if not _G.isCollecting then
@@ -273,25 +267,10 @@ function collectAndDropLoop(itemName, displayName, quantity)
             break
         end
 
-        local pickupTarget = findBestTarget()
+        local pickupTarget = findNearbyItem()
 
         if pickupTarget then
-            local targetPart = pickupTarget.PrimaryPart or pickupTarget:FindFirstChildWhichIsA("BasePart") or pickupTarget
-            
-            -- 1. 传送到目标
-            safeTeleport(targetPart.Position)
-
-            -- (保留) 检查传送是否被服务器拉回
-            local distanceAfterTeleport = (rootPart.Position - targetPart.Position).Magnitude
-            if distanceAfterTeleport > TELEPORT_VERIFICATION_RANGE then
-                library:Notify({Title = "错误", Text = "传送被服务器拉回！正在返回篝火...", Duration = 4})
-                rootPart.CFrame = CFrame.new(BONFIRE_POSITION + Vector3.new(0, 4, 0))
-                task.wait(0.2)
-                _G.isCollecting = false
-                break
-            end
-            
-            -- 2. 执行你提供的新拾取序列
+            -- 执行拾取序列
             pcall(function()
                 RemoteEvents.EquipItemHandle:FireServer("FireAllClients", activeSack)
                 task.wait(0.05)
@@ -302,40 +281,28 @@ function collectAndDropLoop(itemName, displayName, quantity)
                 RemoteEvents.StopDraggingItem:FireServer(pickupTarget)
                 RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
             end)
-            task.wait(0.1)
-
-            -- 3. 传送回篝火
-            safeTeleport(initialPosition)
             
-            -- (保留) 检查返回是否被服务器拉回
-            local distanceAfterReturn = (rootPart.Position - initialPosition).Magnitude
-            if distanceAfterReturn > TELEPORT_VERIFICATION_RANGE then
-                library:Notify({Title = "错误", Text = "返回时被服务器拉回！正在尝试校正位置...", Duration = 4})
-                rootPart.CFrame = CFrame.new(BONFIRE_POSITION + Vector3.new(0, 4, 0))
-                task.wait(0.2)
-                _G.isCollecting = false
-                break
-            end
+            task.wait(0.1) -- 等待物品进入背包
 
-            -- 4. 执行你提供的新丢弃序列
+            -- 执行丢弃序列
             pcall(function()
-                local itemInWorldSample = workspace.Items:FindFirstChild(itemName) or workspace.ltems:FindFirstChild(itemName)
-                local itemInInventory = inventory:FindFirstChild(itemName)
+                -- 智能修正：确保丢弃的是我们刚刚拾取的物品类型
+                local itemToDrop = inventory:FindFirstChild(itemName)
+                local itemSampleInWorld = findNearbyItem() or pickupTarget -- 找一个世界上的样本用于丢弃事件
 
-                if itemInWorldSample and itemInInventory then
+                if itemToDrop and itemSampleInWorld then
                     local dropEvent = RemoteEvents.RequestBagDropItem
                     RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
                     task.wait(0.05)
-                    -- 注意：这里使用 itemInInventory 来确保丢弃的是我们刚捡到的物品类型
-                    dropEvent:FireServer(activeSack, itemInInventory, true)
+                    dropEvent:FireServer(activeSack, itemToDrop, true)
                 else
-                     library:Notify({Title = "警告", Text = "无法在背包中找到刚拾取的物品用于丢弃。", Duration = 3})
+                    -- library:Notify({Title = "警告", Text = "无法在背包中找到刚拾取的物品用于丢弃。", Duration = 3})
                 end
             end)
-            task.wait(0.1)
-
+            
+            task.wait(1) -- 每次循环之间等待1秒，防止操作过快
         else
-            library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
+            library:Notify({Title = "提示", Text = "附近找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
     end
@@ -345,6 +312,10 @@ function collectAndDropLoop(itemName, displayName, quantity)
     end
     _G.isCollecting = false
 end
+
+-- =================================================================
+-- ^^^^^^  新的收集功能在这里  ^^^^^^
+-- =================================================================
 
 -- ESP
 local function toggleESP(itemName, displayName, color)
