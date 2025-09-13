@@ -204,19 +204,16 @@ local function teleportToBonfire()
 end
 
 -- =================================================================
--- VVVVVV  【最终版】无限范围 & 智能规避收集功能 VVVVVV
+-- VVVVVV  收集功能: 50米外 & 无限范围  VVVVVV
 -- 警告: 此功能会丢弃您背包里的【第一个】物品，无论它是什么！
 -- =================================================================
 function collectAndDropLoop(itemName, displayName, quantity)
-    -- [修改 1] 设置最小距离，避免重复收集脚下的物品
-    local MIN_SEARCH_DISTANCE = 10 
-    -- [修改 2] 设置最大距离为无限大
+    local MIN_SEARCH_DISTANCE = 50 
     local MAX_SEARCH_DISTANCE = math.huge 
 
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local inventory = LP:WaitForChild("Inventory")
 
-    -- 智能背包识别
     local activeSack = nil
     for _, item in ipairs(inventory:GetChildren()) do
         if string.match(item.Name, "Sack$") then
@@ -231,7 +228,8 @@ function collectAndDropLoop(itemName, displayName, quantity)
         return
     end
 
-    library:Notify({Title = "任务开始", Text = ("将在 %d米-无限 范围内循环收集 %d 个%s"):format(MIN_SEARCH_DISTANCE, quantity, displayName), Duration = 3})
+    -- [修改] 简化任务开始提示
+    library:Notify({Title = "任务开始", Text = ("开始循环收集 %d 个 %s"):format(quantity, displayName), Duration = 3})
 
     local function findItemInRange()
         local rootPart = Character and Character:FindFirstChild("HumanoidRootPart")
@@ -248,7 +246,6 @@ function collectAndDropLoop(itemName, displayName, quantity)
                         local itemPart = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
                         if itemPart then
                             local dist = (myPos - itemPart.Position).Magnitude
-                            -- 核心逻辑：距离必须大于最小距离，并且小于当前找到的最近距离
                             if dist >= MIN_SEARCH_DISTANCE and dist < closestDist then
                                 closestDist = dist
                                 bestTarget = item
@@ -261,7 +258,6 @@ function collectAndDropLoop(itemName, displayName, quantity)
         return bestTarget
     end
 
-    -- 主循环
     for i = 1, quantity do
         if not _G.isCollecting then
             library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。", Duration = 3})
@@ -271,7 +267,6 @@ function collectAndDropLoop(itemName, displayName, quantity)
         local pickupTarget = findItemInRange()
 
         if pickupTarget then
-            -- 拾取序列
             pcall(function()
                 RemoteEvents.EquipItemHandle:FireServer("FireAllClients", activeSack)
                 task.wait(0.05)
@@ -285,10 +280,9 @@ function collectAndDropLoop(itemName, displayName, quantity)
             
             task.wait(0.1)
 
-            -- 严格遵循您的原始丢弃逻辑
             pcall(function()
                 if #inventory:GetChildren() > 0 then
-                    local itemToDrop = inventory:GetChildren()[1] -- 获取背包里的第一个物品
+                    local itemToDrop = inventory:GetChildren()[1]
                     local dropEvent = RemoteEvents.RequestBagDropItem
                     
                     RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
@@ -300,7 +294,8 @@ function collectAndDropLoop(itemName, displayName, quantity)
             
             task.wait(0.1)
         else
-            library:Notify({Title = "提示", Text = "在 " .. MIN_SEARCH_DISTANCE .. " 米外找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
+            -- [修改] 简化找不到物品的提示
+            library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
     end
@@ -311,7 +306,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
     _G.isCollecting = false
 end
 -- =================================================================
--- ^^^^^^  【最终版】无限范围 & 智能规避收集功能  ^^^^^^
+-- ^^^^^^  收集功能: 50米外 & 无限范围  ^^^^^^
 -- =================================================================
 
 
