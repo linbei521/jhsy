@@ -284,16 +284,16 @@ function collectAndDropLoop(itemName, displayName, quantity)
         if pickupTarget then
             pcall(function()
                 RemoteEvents.EquipItemHandle:FireServer("FireAllClients", activeSack)
-                task.wait(0.05)
+                task.wait(0.005)
                 RemoteEvents.RequestStartDraggingItem:FireServer(pickupTarget)
-                task.wait(0.05)
+                task.wait(0.005)
                 RemoteEvents.RequestBagStoreItem:InvokeServer(activeSack, pickupTarget)
-                task.wait(0.05)
+                task.wait(0.005)
                 RemoteEvents.StopDraggingItem:FireServer(pickupTarget)
                 RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
             end)
 
-            task.wait(0.1)
+            task.wait(0.005)
 
             pcall(function()
                 if #inventory:GetChildren() > 0 then
@@ -301,13 +301,13 @@ function collectAndDropLoop(itemName, displayName, quantity)
                     local dropEvent = RemoteEvents.RequestBagDropItem
 
                     RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
-                    task.wait(0.05)
+                    task.wait(0.005)
 
                     dropEvent:FireServer(activeSack, itemToDrop, true) 
                 end
             end)
 
-            task.wait(0.1)
+            task.wait(0.005)
         else
             library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
