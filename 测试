@@ -204,12 +204,14 @@ local function teleportToBonfire()
 end
 
 -- =================================================================
--- VVVVVV  严格遵循您原始逻辑的收集功能  VVVVVV
+-- VVVVVV  【最终版】无限范围 & 智能规避收集功能 VVVVVV
 -- 警告: 此功能会丢弃您背包里的【第一个】物品，无论它是什么！
 -- =================================================================
 function collectAndDropLoop(itemName, displayName, quantity)
-    local MIN_SEARCH_DISTANCE = 15
-    local MAX_SEARCH_DISTANCE = 100
+    -- [修改 1] 设置最小距离，避免重复收集脚下的物品
+    local MIN_SEARCH_DISTANCE = 10 
+    -- [修改 2] 设置最大距离为无限大
+    local MAX_SEARCH_DISTANCE = math.huge 
 
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local inventory = LP:WaitForChild("Inventory")
@@ -229,7 +231,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
         return
     end
 
-    library:Notify({Title = "任务开始", Text = ("将在 %d-%d 米范围内循环收集 %d 个%s"):format(MIN_SEARCH_DISTANCE, MAX_SEARCH_DISTANCE, quantity, displayName), Duration = 3})
+    library:Notify({Title = "任务开始", Text = ("将在 %d米-无限 范围内循环收集 %d 个%s"):format(MIN_SEARCH_DISTANCE, quantity, displayName), Duration = 3})
 
     local function findItemInRange()
         local rootPart = Character and Character:FindFirstChild("HumanoidRootPart")
@@ -246,6 +248,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
                         local itemPart = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
                         if itemPart then
                             local dist = (myPos - itemPart.Position).Magnitude
+                            -- 核心逻辑：距离必须大于最小距离，并且小于当前找到的最近距离
                             if dist >= MIN_SEARCH_DISTANCE and dist < closestDist then
                                 closestDist = dist
                                 bestTarget = item
@@ -291,14 +294,13 @@ function collectAndDropLoop(itemName, displayName, quantity)
                     RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
                     task.wait(0.05)
                     
-                    -- 使用正确的远程事件参数格式，但丢弃的是第一个物品
                     dropEvent:FireServer(activeSack, itemToDrop, true) 
                 end
             end)
             
             task.wait(0.1)
         else
-            library:Notify({Title = "提示", Text = "在指定范围内找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
+            library:Notify({Title = "提示", Text = "在 " .. MIN_SEARCH_DISTANCE .. " 米外找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
     end
@@ -309,7 +311,7 @@ function collectAndDropLoop(itemName, displayName, quantity)
     _G.isCollecting = false
 end
 -- =================================================================
--- ^^^^^^  严格遵循您原始逻辑的收集功能  ^^^^^^
+-- ^^^^^^  【最终版】无限范围 & 智能规避收集功能  ^^^^^^
 -- =================================================================
 
 
