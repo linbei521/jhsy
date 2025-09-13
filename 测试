@@ -1,5 +1,5 @@
 -- UI 初始化
-getgenv()._CONFIGS = { UI_NAME = "镜花水月99夜-优化版" }
+getgenv()._CONFIGS = { UI_NAME = "镜花水月99夜" }
 loadstring(game:HttpGet("https://pastebin.com/raw/CxxfciVn"))()
 
 -- 服务
@@ -19,16 +19,6 @@ local ActiveESPBillboards = {}
 local DistanceForAutoChopTree = 25
 _G.isCollecting = false
 local collectQuantity = 10
-
--- 优化：收集设置 (这些设置对新逻辑影响不大，但保留以防万一)
-local CollectSettings = {
-    MaxRetries = 3,
-    RetryDelay = 2,
-    PickupDelay = 1,
-    TeleportDelay = 0.5,
-    VerificationRange = 30,
-    SafetyDelay = 1.5
-}
 
 local Features = {
     KillAura = false,
@@ -214,147 +204,103 @@ local function teleportToBonfire()
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
--- ==========================[最终修改版收集逻辑 - 开始]==========================
-
--- 辅助函数：统计背包内物品数量
-local function getInventoryItemCount(itemName)
+-- 新的收集逻辑
+function collectAndDropLoop(itemName, displayName, quantity)
+    local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local inventory = LP:WaitForChild("Inventory")
-    local count = 0
+    
+    local activeSack = nil
     for _, item in ipairs(inventory:GetChildren()) do
-        if item.Name == itemName then
-            count = count + 1
+        if string.match(item.Name, "Sack$") then
+            activeSack = item
+            break
         end
     end
-    return count
-end
 
--- 这是基于您要求的全新函数：快速本地拾取 + 丢弃
-function collectAndDropLocalLoop(itemName, displayName, quantity)
-    _G.isCollecting = true
-    library:Notify({Title = "任务开始", Text = "将原地刷 " .. quantity .. " 个" .. displayName, Duration = 3})
-
-    local player = game:GetService("Players").LocalPlayer
-    local remoteEvents = game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents")
-    local PICKUP_RANGE = math.huge -- 无限范围
-
-    -- 寻找一个可用的背包
-    local function findActiveSack()
-        local inventory = player:WaitForChild("Inventory")
-        for _, item in ipairs(inventory:GetChildren()) do
-            if string.match(item.Name, "Sack$") or item.Name:find("Sack") then
-                return item
-            end
-        end
-        return nil
+    if not activeSack then
+        library:Notify({Title = "致命错误", Text = "找不到任何以 'Sack' 结尾的背包", Duration = 4})
+        _G.isCollecting = false
+        return
     end
+    
+    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName, Duration = 3})
 
-    -- 在无限范围内寻找最近的、可拾取的物品
-    local function findClosestItem()
-        local closestItem, minDist = nil, PICKUP_RANGE
-        local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if not rootPart then return nil end
+    local function findDistantItem(minDistance, maxDistance)
+        local playerPosition = Character and Character:FindFirstChild("HumanoidRootPart")
+        if not playerPosition then return nil end
         
-        local folders = {"ltems", "Items", "MapItems", "WorldItems"}
-        for _, folderName in ipairs(folders) do
-            local folder = workspace:FindFirstChild(folderName)
-            if folder then
-                for _, item in ipairs(folder:GetChildren()) do
-                    if item.Name == itemName then
-                        local itemPart = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")) or item
-                        if itemPart then
-                            local dist = (itemPart.Position - rootPart.Position).Magnitude
-                            if dist < minDist then
-                                minDist = dist
-                                closestItem = item
-                            end
-                        end
+        local targetItem = nil
+        local shortestDistance = maxDistance or 100
+        
+        for _, item in pairs(workspace.Items:GetChildren()) do
+            if item.Name == itemName then
+                local itemPosition = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
+                if itemPosition then
+                    local distance = (playerPosition.Position - itemPosition.Position).Magnitude
+                    if distance >= (minDistance or 15) and distance < shortestDistance then
+                        shortestDistance = distance
+                        targetItem = item
                     end
                 end
             end
         end
-        return closestItem
+        
+        return targetItem
     end
 
-    -- 主循环
     for i = 1, quantity do
         if not _G.isCollecting then
-            library:Notify({Title = "任务中断", Text = "收集任务已手动停止。已完成 " .. (i-1) .. "/" .. quantity, Duration = 3})
+            library:Notify({Title = "任务中断", Text = "收集任务已被手动停止。", Duration = 3})
             break
         end
 
-        local sack = findActiveSack()
-        if not sack then
-            library:Notify({Title = "错误", Text = "找不到任何背包！", Duration = 4})
-            break
-        end
-
-        local targetItem = findClosestItem()
-
-        if targetItem then
-            library:Notify({Title = "进度", Text = "正在处理第 " .. i .. "/" .. quantity .. " 个" .. displayName, Duration = 2})
+        local groundItem = findDistantItem(15, 100)
+        
+        if groundItem and activeSack then
+            RemoteEvents.EquipItemHandle:FireServer("FireAllClients", activeSack)
+            wait(0.05)
+            RemoteEvents.RequestStartDraggingItem:FireServer(groundItem)
+            wait(0.05)
+            RemoteEvents.RequestBagStoreItem:InvokeServer(activeSack, groundItem)
+            wait(0.05)
+            RemoteEvents.StopDraggingItem:FireServer(groundItem)
+            RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
             
-            local beforeCount = getInventoryItemCount(itemName)
-
-            -- [您提供的快速拾取逻辑]
-            local pickupSuccess, err = pcall(function()
-                remoteEvents.EquipItemHandle:FireServer("FireAllClients", sack)
-                task.wait(0.1)
-                remoteEvents.RequestStartDraggingItem:FireServer(targetItem)
-                task.wait(0.1)
-                remoteEvents.RequestBagStoreItem:InvokeServer(sack, targetItem)
-                task.wait(0.1)
-                remoteEvents.StopDraggingItem:FireServer(targetItem)
-                remoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = player.Character.Head, Volume = 0.25})
-            end)
-
-            if not pickupSuccess then
-                library:Notify({Title = "拾取错误", Text = "拾取时发生错误，跳过此物品。", Duration = 3})
-                task.wait(1)
-                continue -- 跳过本次循环
-            end
+            wait(0.05)
             
-            task.wait(0.3) -- 等待背包状态更新
-
-            local afterCount = getInventoryItemCount(itemName)
-
-            -- [丢弃物品逻辑]
-            if afterCount > beforeCount then
-                library:Notify({Title = "拾取成功", Text = "已拾取一个 " .. displayName .. "，准备丢弃...", Duration = 2})
-                local itemToDrop = player.Inventory:FindFirstChild(itemName)
-                if itemToDrop then
-                    pcall(function()
-                        remoteEvents.RequestBagDropItem:FireServer(sack, itemToDrop, true)
-                    end)
-                    task.wait(0.2) -- 丢弃后短暂等待
-                    local finalCount = getInventoryItemCount(itemName)
-                    if finalCount < afterCount then
-                        -- library:Notify({Title = "丢弃成功", Text = "已成功丢弃一个" .. displayName, Duration = 1})
-                    else
-                        library:Notify({Title = "丢弃验证失败", Text = "物品数量未减少", Duration = 2})
-                    end
-                else
-                    library:Notify({Title = "丢弃失败", Text = "背包里找不到" .. displayName .. " 来丢弃", Duration = 3})
+            local itemModel = workspace.Items:FindFirstChild(itemName)
+            if itemModel then
+                local dropItemEvent = RemoteEvents:WaitForChild("RequestBagDropItem")
+                
+                RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
+                wait(0.05)
+                
+                for _, itemInstance in pairs(inventory:GetChildren()) do
+                    local args = {
+                        itemInstance,
+                        itemModel,
+                        true
+                    }
+                    dropItemEvent:FireServer(unpack(args))
+                    wait(0.05)
+                    break
                 end
-            else
-                library:Notify({Title = "拾取验证失败", Text = "物品数量未增加，可能拾取失败。", Duration = 3})
             end
-
-            -- 添加一个短暂的冷却时间，避免操作过快
-            task.wait(0.5) 
-
+            
+            library:Notify({Title = "进度", Text = "已收集 " .. i .. "/" .. quantity .. " 个" .. displayName, Duration = 1})
         else
-            library:Notify({Title = "提示", Text = "地图上已找不到更多 " .. displayName .. "，任务提前结束。", Duration = 4})
+            library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
+        
+        wait(0.5)
     end
-
+    
     if _G.isCollecting then
-        library:Notify({Title = "任务完成", Text = "原地刷物品任务完成！", Duration = 4})
+        library:Notify({Title = "任务完成", Text = "所有收集任务已完成！", Duration = 5})
     end
     _G.isCollecting = false
 end
--- ==========================[最终修改版收集逻辑 - 结束]==========================
-
 
 -- ESP
 local function toggleESP(itemName, displayName, color)
@@ -1109,7 +1055,7 @@ for _, item in ipairs(teleportItemConfig) do
     end)
 end
 
-local CollectTab = library:CreateTab("收集功能-优化版")
+local CollectTab = library:CreateTab("收集功能")
 CollectTab:NewButton("停止当前收集任务", function()
     if _G.isCollecting then
         _G.isCollecting = false
@@ -1127,24 +1073,16 @@ CollectTab:NewBox("自定义收集数量", "10", function(text)
         library:Notify({Title = "输入错误", Text = "请输入一个有效的正整数。", Duration = 3})
     end
 end)
-
-CollectTab:NewSeparator()
-CollectTab:NewButton("=== 收集设置 (当前模式下部分无效) ===", function() end)
-CollectTab:NewSlider("最大重试次数", "Max_Retries", CollectSettings.MaxRetries, 1, 10, false, function(value) end)
-CollectTab:NewSlider("重试延迟(秒)", "Retry_Delay", CollectSettings.RetryDelay, 1, 10, true, function(value) end)
-CollectTab:NewSlider("拾取延迟(秒)", "Pickup_Delay", CollectSettings.PickupDelay, 0.5, 5, true, function(value) end)
-CollectTab:NewSlider("安全延迟(秒)", "Safety_Delay", CollectSettings.SafetyDelay, 0.5, 5, true, function(value) end)
-
 CollectTab:NewSeparator()
 for _, item in ipairs(collectItemConfig) do
-    CollectTab:NewButton("循环收集: "..item.display.." (优化版)", function()
+    CollectTab:NewButton("循环收集: "..item.display, function()
         if _G.isCollecting then
             library:Notify({Title = "错误", Text = "已有收集任务在运行！请先停止。", Duration = 3})
             return
         end
+        _G.isCollecting = true
         task.spawn(function()
-            -- [已修改] 调用您要求的“快速拾取+丢弃”新函数
-            collectAndDropLocalLoop(item.name, item.display, collectQuantity)
+            collectAndDropLoop(item.name, item.display, collectQuantity)
         end)
     end)
 end
@@ -1262,8 +1200,8 @@ end)
 SettingsTab:NewButton("清除所有透视", ClearAllESP)
 
 library:Notify({
-    Title = "欢迎使用镜花水月-优化版",
-    Text = "已优化收集功能稳定性，支持重试机制和详细状态监控！",
+    Title = "欢迎使用镜花水月",
+    Text = "祝您游戏愉快！（已支持中文"镜花水月"写字）",
     Duration = 5
 })
 if setclipboard then
