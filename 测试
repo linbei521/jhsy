@@ -40,14 +40,31 @@ local AntiDeathTargets = {
 local AntiDeathHealthThreshold = 20
 local lastAntiDeathTrigger = 0
 
+-- 物品缓存系统（提升性能）
+local ItemCache = setmetatable({}, {__mode = "k"})
+local function getOrCreateItemCache(folder)
+    if not ItemCache[folder] then
+        ItemCache[folder] = {}
+    end
+    return ItemCache[folder]
+end
+
 local function ClearAllESP()
     for key, value in pairs(getgenv()) do
         if type(key) == "string" and key:match("^ESP_") then
             if type(value) == "table" then
                 if value.guis then
-                    for _, gui in ipairs(value.guis) do if gui and gui.Parent then gui:Destroy() end end
+                    for _, gui in ipairs(value.guis) do 
+                        if gui and gui.Parent then gui:Destroy() end 
+                    end
                 end
-                if value.conn then value.conn:Disconnect() end
+                if value.conn then 
+                    if type(value.conn) == "table" then
+                        for _, c in ipairs(value.conn) do c:Disconnect() end
+                    else
+                        value.conn:Disconnect()
+                    end
+                end
             end
             getgenv()[key] = nil
         end
@@ -99,32 +116,8 @@ local espItemConfig = {
     {name = "koala", display = "考拉", espColor = Color3.fromRGB(0,255,255)}
 }
 
-local teleportItemConfig = {
-    {name = "Log", display = "木头"}, {name = "Sapling", display = "树苗"}, {name = "Morsel", display = "肉"},
-    {name = "Carrot", display = "胡萝卜"}, {name = "Berry", display = "浆果"}, {name = "Bolt", display = "螺栓"},
-    {name = "Broken Fan", display = "风扇"}, {name = "Coal", display = "煤炭"}, {name = "Coin Stack", display = "钱堆"},
-    {name = "Fuel Canister", display = "燃料罐"}, {name = "Item Chest", display = "宝箱"}, {name = "Old Flashlight", display = "手电筒"},
-    {name = "Old Radio", display = "收音机"}, {name = "Rifle Ammo", display = "步枪子弹"}, {name = "Revolver Ammo", display = "左轮子弹"},
-    {name = "Sheet Metal", display = "金属板"}, {name = "Revolver", display = "左轮"}, {name = "Rifle", display = "步枪"},
-    {name = "Bandage", display = "绷带"}, {name = "Crossbow Cultist", display = "敌人"}, {name = "Bear", display = "熊"},
-    {name = "Alpha Wolf", display = "阿尔法狼"}, {name = "Wolf", display = "狼"}, {name = "Chair", display = "椅子"},
-    {name = "Tyre", display = "轮胎"}, {name = "Alien Chest", display = "外星宝箱"}, {name = "Leather Body", display = "皮革"},
-    {name = "Thorn Body", display = "荆棘铠甲"}, {name = "Iron Body", display = "铁甲"}, {name = "Chest", display = "宝箱"},
-    {name = "Lost Child", display = "走失的孩子"}, {name = "Lost Child1", display = "走失的孩子1"}, {name = "Lost Child2", display = "走失的孩子2"},
-    {name = "Lost Child3", display = "走失的孩子3"}, {name = "Dino Kid", display = "恐龙孩子"}, {name = "kraken kid", display = "海怪孩子"},
-    {name = "Squid kid", display = "鱿鱼孩子"}, {name = "Koala Kid", display = "考拉孩子"}, {name = "koala", display = "考拉"}
-}
-
-local collectItemConfig = {
-    {name = "Log", display = "木头"}, {name = "Sapling", display = "树苗"}, {name = "Morsel", display = "肉"},
-    {name = "Carrot", display = "胡萝卜"}, {name = "Berry", display = "浆果"}, {name = "Bolt", display = "螺栓"},
-    {name = "Broken Fan", display = "风扇"}, {name = "Coal", display = "煤炭"}, {name = "Coin Stack", display = "钱堆"},
-    {name = "Fuel Canister", display = "燃料罐"}, {name = "Item Chest", display = "宝箱"}, {name = "Old Flashlight", display = "手电筒"},
-    {name = "Old Radio", display = "收音机"}, {name = "Rifle Ammo", display = "步枪子弹"}, {name = "Revolver Ammo", display = "左轮子弹"},
-    {name = "Sheet Metal", display = "金属板"}, {name = "Revolver", display = "左轮"}, {name = "Rifle", display = "步枪"},
-    {name = "Bandage", display = "绷带"}, {name = "Chair", display = "椅子"}, {name = "Tyre", display = "轮胎"},
-    {name = "Leather Body", display = "皮革"}, {name = "Thorn Body", display = "荆棘铠甲"}, {name = "Iron Body", display = "铁甲"}
-}
+local teleportItemConfig = espItemConfig
+local collectItemConfig = espItemConfig
 
 local BONFIRE_POSITION = Vector3.new(0.189, 7.831, -0.341)
 
@@ -150,9 +143,11 @@ local function setFog(enabled)
     end
 end
 
+-- ✅ 修复：递归搜索所有后代
 local function findItems(itemName)
     local found = {}
     local folders = {"ltems", "Items", "MapItems", "WorldItems"}
+    
     for _, folderName in ipairs(folders) do
         local folder = Workspace:FindFirstChild(folderName)
         if folder then
@@ -169,6 +164,7 @@ local function findItems(itemName)
     return found
 end
 
+-- ✅ 修复：传送前做地面检测
 local function teleportToItem(itemName, displayName)
     if not Character or not Character:FindFirstChild("HumanoidRootPart") then
         library:Notify({ Title = "错误", Text = "角色未准备好", Duration = 2 })
@@ -189,8 +185,19 @@ local function teleportToItem(itemName, displayName)
         end
     end
     if closest then
-        Character:MoveTo(closest.Position + Vector3.new(0, 3, 0))
+        -- 地面检测
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        rayParams.FilterDescendantsInstances = {Character}
+        local rayOrigin = closest.Position + Vector3.new(0, 10, 0)
+        local rayDirection = Vector3.new(0, -20, 0)
+        local raycastResult = workspace:Raycast(rayOrigin, rayDirection, rayParams)
+        local safePos = raycastResult and raycastResult.Position or closest.Position
+        
+        Character:PivotTo(CFrame.new(safePos + Vector3.new(0, 3.5, 0)))
         library:Notify({ Title = "成功", Text = "已传送到"..displayName, Duration = 2 })
+    else
+        library:Notify({ Title = "错误", Text = "未找到有效传送点", Duration = 2 })
     end
 end
 
@@ -199,7 +206,16 @@ local function teleportToBonfire()
         library:Notify({ Title = "错误", Text = "角色未准备好", Duration = 2 })
         return
     end
-    Character:MoveTo(BONFIRE_POSITION)
+    -- 地面检测篝火位置
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {Character}
+    local rayOrigin = BONFIRE_POSITION + Vector3.new(0, 10, 0)
+    local rayDirection = Vector3.new(0, -20, 0)
+    local raycastResult = workspace:Raycast(rayOrigin, rayDirection, rayParams)
+    local safePos = raycastResult and raycastResult.Position or BONFIRE_POSITION
+    
+    Character:PivotTo(CFrame.new(safePos + Vector3.new(0, 3.5, 0)))
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
@@ -228,20 +244,19 @@ function collectAndDropLoop(itemName, displayName, quantity)
         return
     end
 
-    -- [修改] 简化任务开始提示
     library:Notify({Title = "任务开始", Text = ("开始循环收集 %d 个 %s"):format(quantity, displayName), Duration = 3})
 
     local function findItemInRange()
         local rootPart = Character and Character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return nil end
-        
+
         local myPos = rootPart.Position
         local bestTarget, closestDist = nil, MAX_SEARCH_DISTANCE
-        
+
         local foldersToSearch = {Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems"), Workspace:FindFirstChild("WorldItems")}
         for _, folder in ipairs(foldersToSearch) do
             if folder then
-                for _, item in ipairs(folder:GetChildren()) do
+                for _, item in ipairs(folder:GetDescendants()) do
                     if item.Name == itemName then
                         local itemPart = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
                         if itemPart then
@@ -277,24 +292,23 @@ function collectAndDropLoop(itemName, displayName, quantity)
                 RemoteEvents.StopDraggingItem:FireServer(pickupTarget)
                 RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
             end)
-            
+
             task.wait(0.1)
 
             pcall(function()
                 if #inventory:GetChildren() > 0 then
                     local itemToDrop = inventory:GetChildren()[1]
                     local dropEvent = RemoteEvents.RequestBagDropItem
-                    
+
                     RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
                     task.wait(0.05)
-                    
+
                     dropEvent:FireServer(activeSack, itemToDrop, true) 
                 end
             end)
-            
+
             task.wait(0.1)
         else
-            -- [修改] 简化找不到物品的提示
             library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
@@ -310,7 +324,7 @@ end
 -- =================================================================
 
 
--- ESP
+-- ✅ 修复 ESP：防止重复创建 + 动态监听子文件夹
 local function toggleESP(itemName, displayName, color)
     local espKey = "ESP_" .. itemName:gsub(" ", "_")
     if getgenv()[espKey] then
@@ -326,17 +340,26 @@ local function toggleESP(itemName, displayName, color)
                 if gui and gui.Parent then gui:Destroy() end
             end
         end
-        if espData.conn then espData.conn:Disconnect() end
+        if espData.conn then
+            if type(espData.conn) == "table" then
+                for _, c in ipairs(espData.conn) do c:Disconnect() end
+            else
+                espData.conn:Disconnect()
+            end
+        end
         getgenv()[espKey] = nil
         library:Notify({ Title = "提示", Text = "已关闭"..displayName.."透视", Duration = 2 })
         return
     end
 
     local items = findItems(itemName)
-    getgenv()[espKey] = {guis = {}}
+    getgenv()[espKey] = {guis = {}, created = {}}
 
     local function createESP(itemPart)
         if not itemPart or not itemPart:IsDescendantOf(Workspace) then return end
+        if getgenv()[espKey].created[itemPart] then return end
+        getgenv()[espKey].created[itemPart] = true
+
         local billboard = Instance.new("BillboardGui")
         billboard.Adornee = itemPart
         billboard.Size = UDim2.new(0, 100, 0, 40)
@@ -361,19 +384,30 @@ local function toggleESP(itemName, displayName, color)
             if not parent then
                 if billboard then billboard:Destroy() end
                 if conn then conn:Disconnect() end
+                getgenv()[espKey].created[itemPart] = nil
             end
         end)
     end
 
     for _, item in ipairs(items) do createESP(item.part) end
 
-    getgenv()[espKey].conn = Workspace.DescendantAdded:Connect(function(descendant)
-        if descendant.Name == itemName and descendant:IsA("Model") then
-            local primaryPart = descendant.PrimaryPart or descendant:FindFirstChild("HumanoidRootPart") or descendant:FindFirstChild("Handle")
-            if primaryPart then createESP(primaryPart) end
+    -- 监听可能包含物品的文件夹
+    local folders = {"ltems", "Items", "MapItems", "WorldItems"}
+    local connections = {}
+    for _, folderName in ipairs(folders) do
+        local folder = Workspace:FindFirstChild(folderName)
+        if folder then
+            local conn = folder.DescendantAdded:Connect(function(descendant)
+                if descendant.Name == itemName and descendant:IsA("Model") then
+                    local primaryPart = descendant.PrimaryPart or descendant:FindFirstChild("HumanoidRootPart") or descendant:FindFirstChild("Handle")
+                    if primaryPart then createESP(primaryPart) end
+                end
+            end)
+            table.insert(connections, conn)
         end
-    end)
+    end
 
+    getgenv()[espKey].conn = connections
     library:Notify({ Title = "提示", Text = "已开启"..displayName.."透视 ("..#items.."个)", Duration = 2 })
 end
 
@@ -716,14 +750,6 @@ local function generatePreview()
 end
 
 -- 单点种树（成功校验）
-local function getSaplingFolder()
-    local candidates = {"Items", "ltems", "WorldItems", "MapItems"}
-    for _, name in ipairs(candidates) do
-        local f = Workspace:FindFirstChild(name)
-        if f then return f end
-    end
-    return nil
-end
 local function plantSingleTreeAt(position)
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local folder = getSaplingFolder()
