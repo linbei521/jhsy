@@ -204,11 +204,20 @@ local function teleportToBonfire()
     library:Notify({ Title = "成功", Text = "已传送回篝火", Duration = 2 })
 end
 
--- 新的收集逻辑
+-- ==================== 新的收集功能 ====================
+-- 基于你提供的代码进行修改和整合，此版本不使用传送。
 function collectAndDropLoop(itemName, displayName, quantity)
+    local rootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then
+        library:Notify({Title = "错误", Text = "找不到玩家角色。", Duration = 3})
+        _G.isCollecting = false
+        return
+    end
+    
     local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
     local inventory = LP:WaitForChild("Inventory")
     
+    -- 动态查找背包
     local activeSack = nil
     for _, item in ipairs(inventory:GetChildren()) do
         if string.match(item.Name, "Sack$") then
@@ -218,33 +227,36 @@ function collectAndDropLoop(itemName, displayName, quantity)
     end
 
     if not activeSack then
-        library:Notify({Title = "致命错误", Text = "找不到任何以 'Sack' 结尾的背包", Duration = 4})
+        library:Notify({Title = "错误", Text = "找不到任何背包 (Sack)！", Duration = 4})
         _G.isCollecting = false
         return
     end
     
-    library:Notify({Title = "任务开始", Text = "将收集 " .. quantity .. " 个" .. displayName, Duration = 3})
+    library:Notify({Title = "任务开始", Text = "将在原地收集 " .. quantity .. " 个" .. displayName, Duration = 3})
 
-    local function findDistantItem(minDistance, maxDistance)
-        local playerPosition = Character and Character:FindFirstChild("HumanoidRootPart")
-        if not playerPosition then return nil end
-        
+    -- 在附近寻找物品的函数
+    local function findNearbyItem(name, minDistance, maxDistance)
+        local playerPosition = rootPart.Position
         local targetItem = nil
-        local shortestDistance = maxDistance or 100
+        local bestDistance = maxDistance or 150
         
-        for _, item in pairs(workspace.Items:GetChildren()) do
-            if item.Name == itemName then
-                local itemPosition = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
-                if itemPosition then
-                    local distance = (playerPosition.Position - itemPosition.Position).Magnitude
-                    if distance >= (minDistance or 15) and distance < shortestDistance then
-                        shortestDistance = distance
-                        targetItem = item
+        local foldersToSearch = {Workspace, Workspace:FindFirstChild("Items"), Workspace:FindFirstChild("ltems"), Workspace:FindFirstChild("MapItems")}
+        for _, folder in pairs(foldersToSearch) do
+            if folder then
+                for _, item in ipairs(folder:GetChildren()) do
+                    if item.Name == name then
+                        local itemPart = item:FindFirstChild("HumanoidRootPart") or item.PrimaryPart
+                        if itemPart then
+                            local distance = (playerPosition - itemPart.Position).Magnitude
+                            if distance >= (minDistance or 10) and distance < bestDistance then
+                                bestDistance = distance
+                                targetItem = item
+                            end
+                        end
                     end
                 end
             end
         end
-        
         return targetItem
     end
 
@@ -254,46 +266,38 @@ function collectAndDropLoop(itemName, displayName, quantity)
             break
         end
 
-        local groundItem = findDistantItem(15, 100)
-        
-        if groundItem and activeSack then
-            RemoteEvents.EquipItemHandle:FireServer("FireAllClients", activeSack)
-            wait(0.05)
-            RemoteEvents.RequestStartDraggingItem:FireServer(groundItem)
-            wait(0.05)
-            RemoteEvents.RequestBagStoreItem:InvokeServer(activeSack, groundItem)
-            wait(0.05)
-            RemoteEvents.StopDraggingItem:FireServer(groundItem)
-            RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
+        local targetToPickUp = findNearbyItem(itemName, 10, 150)
+
+        if targetToPickUp then
+            -- 拾取过程
+            pcall(function()
+                RemoteEvents.RequestStartDraggingItem:FireServer(targetToPickUp)
+                task.wait(0.05)
+                RemoteEvents.RequestBagStoreItem:InvokeServer(activeSack, targetToPickUp)
+                task.wait(0.05)
+                RemoteEvents.StopDraggingItem:FireServer(targetToPickUp)
+                RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagGet", {Instance = Character.Head, Volume = 0.25})
+            end)
             
-            wait(0.05)
+            task.wait(0.1) -- 等待物品进入背包
             
-            local itemModel = workspace.Items:FindFirstChild(itemName)
-            if itemModel then
-                local dropItemEvent = RemoteEvents:WaitForChild("RequestBagDropItem")
-                
-                RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
-                wait(0.05)
-                
-                for _, itemInstance in pairs(inventory:GetChildren()) do
-                    local args = {
-                        itemInstance,
-                        itemModel,
-                        true
-                    }
-                    dropItemEvent:FireServer(unpack(args))
-                    wait(0.05)
-                    break
+            -- 丢弃过程
+            pcall(function()
+                -- 找到一个同名物品作为丢弃的“样本”，这是更安全的做法
+                local dropSample = findNearbyItem(itemName, 0, 9e9) or targetToPickUp
+                if dropSample then
+                    local dropItemEvent = RemoteEvents:WaitForChild("RequestBagDropItem")
+                    RemoteEvents.ReplicateSound:FireServer("FireAllClients", "BagDrop", {Instance = Character.Head, Volume = 0.25})
+                    task.wait(0.05)
+                    dropItemEvent:FireServer(activeSack, dropSample, true)
                 end
-            end
+            end)
             
-            library:Notify({Title = "进度", Text = "已收集 " .. i .. "/" .. quantity .. " 个" .. displayName, Duration = 1})
+            task.wait(0.2) -- 每个循环之间的延迟
         else
-            library:Notify({Title = "提示", Text = "找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
+            library:Notify({Title = "提示", Text = "附近找不到更多" .. displayName .. "，任务提前结束。", Duration = 4})
             break
         end
-        
-        wait(0.5)
     end
     
     if _G.isCollecting then
@@ -301,6 +305,8 @@ function collectAndDropLoop(itemName, displayName, quantity)
     end
     _G.isCollecting = false
 end
+-- =======================================================
+
 
 -- ESP
 local function toggleESP(itemName, displayName, color)
@@ -1084,7 +1090,7 @@ for _, item in ipairs(collectItemConfig) do
         task.spawn(function()
             collectAndDropLoop(item.name, item.display, collectQuantity)
         end)
-    end)
+    end
 end
 
 -- 种树板块（Section区分）
@@ -1201,7 +1207,7 @@ SettingsTab:NewButton("清除所有透视", ClearAllESP)
 
 library:Notify({
     Title = "欢迎使用镜花水月",
-    Text = "祝您游戏愉快！（已支持中文"镜花水月"写字）",
+    Text = "祝您游戏愉快！（已支持中文“镜花水月”写字）",
     Duration = 5
 })
 if setclipboard then
